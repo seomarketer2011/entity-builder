@@ -82,5 +82,28 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ connections: report }, { status: 200 });
+  // Full tenancy state, so support can see where a setup flow is stuck.
+  const { data: orgs } = await supabase
+    .from("organisations")
+    .select("id, name, campaigns(id, name, sites(id, name, domain, base_url))");
+  const { data: jobs } = await supabase
+    .from("gsc_sync_jobs")
+    .select("id, property_id, kind, status, date_from, date_to, rows_imported, error, created_at")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  const { data: links } = await supabase
+    .from("gsc_properties")
+    .select("property_uri, site_id")
+    .not("site_id", "is", null);
+
+  return NextResponse.json(
+    {
+      appUser: user.email,
+      organisations: orgs ?? [],
+      linkedProperties: links ?? [],
+      recentSyncJobs: jobs ?? [],
+      connections: report,
+    },
+    { status: 200 },
+  );
 }
