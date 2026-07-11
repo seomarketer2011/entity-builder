@@ -56,6 +56,19 @@ async function apiCall<T>(
   return (await response.json()) as T;
 }
 
+/** The Google account's own email (requires the `email` scope). */
+export async function fetchGoogleAccountEmail(
+  fetchImpl: FetchLike,
+  accessToken: string,
+): Promise<string | null> {
+  const response = await fetchImpl("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return null;
+  const json = (await response.json()) as { email?: string };
+  return json.email ?? null;
+}
+
 export async function listProperties(
   fetchImpl: FetchLike,
   accessToken: string,

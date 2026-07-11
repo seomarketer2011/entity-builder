@@ -1,6 +1,7 @@
 import {
   encryptToken,
   exchangeCode,
+  fetchGoogleAccountEmail,
   listProperties,
   type FetchLike,
 } from "@entity-builder/gsc";
@@ -63,13 +64,16 @@ export async function GET(request: Request) {
 
     const encrypted = encryptToken(grant.refreshToken, encryptionKey);
 
+    // The Google account's own email — NOT the app user's login email.
+    const googleEmail = await fetchGoogleAccountEmail(fetchImpl, grant.accessToken);
+
     // Writes go through the user's session client, so RLS enforces that the
     // user is a member of the organisation they're connecting for.
     const { data: connection, error: connError } = await supabase
       .from("google_connections")
       .insert({
         organisation_id: saved.organisationId,
-        google_account_email: user.email ?? "unknown",
+        google_account_email: googleEmail ?? "unknown",
         encrypted_refresh_token: `\\x${encrypted.ciphertext.toString("hex")}`,
         token_nonce: `\\x${encrypted.nonce.toString("hex")}`,
       })

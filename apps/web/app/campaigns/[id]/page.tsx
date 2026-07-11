@@ -9,10 +9,10 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; q?: string }>;
 }) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, q } = await searchParams;
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -96,6 +96,20 @@ export default async function CampaignPage({
             Read-only Search Console access; refresh tokens are encrypted at rest.
           </span>
         </p>
+        <form className="inline" method="get">
+          <input
+            name="q"
+            placeholder="Filter properties (e.g. jdselectricians)"
+            defaultValue={q ?? ""}
+            size={40}
+          />
+          <button className="secondary">Filter</button>
+          {q ? (
+            <a className="button secondary" href={`/campaigns/${id}`}>
+              Clear
+            </a>
+          ) : null}
+        </form>
         {(properties ?? []).length === 0 ? (
           <p className="muted">No properties discovered yet.</p>
         ) : (
@@ -109,7 +123,9 @@ export default async function CampaignPage({
               </tr>
             </thead>
             <tbody>
-              {(properties ?? []).map((p) => (
+              {(properties ?? [])
+                .filter((p) => !q || p.property_uri.toLowerCase().includes(q.toLowerCase()))
+                .map((p) => (
                 <tr key={p.id}>
                   <td>{p.property_uri}</td>
                   <td>{p.permission_level ?? "—"}</td>
