@@ -1,0 +1,10 @@
+{
+  "name": "@entity-builder/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ingestion & analysis worker — scaffolded in Phase 1 (docs/ROADMAP.md).",
+  "scripts": {
+    "typecheck": "echo 'apps/worker: Phase 1 — not yet implemented'",
+    "test": "echo 'apps/worker: Phase 1 — not yet implemented'"
+  }
+}

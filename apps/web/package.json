@@ -1,0 +1,10 @@
+{
+  "name": "@entity-builder/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js dashboard — scaffolded in Phase 1 (docs/ROADMAP.md).",
+  "scripts": {
+    "typecheck": "echo 'apps/web: Phase 1 — not yet implemented'",
+    "test": "echo 'apps/web: Phase 1 — not yet implemented'"
+  }
+}

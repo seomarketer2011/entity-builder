@@ -1,0 +1,54 @@
+{
+  "industry": { "slug": "fire-protection", "name": "Fire protection" },
+  "entities": [
+    {
+      "canonicalName": "Fire door installation",
+      "entityType": "service",
+      "aliases": ["fire door fitting", "fire-rated door installation", "fire doors fitted"]
+    },
+    {
+      "canonicalName": "Fire door inspection",
+      "entityType": "service",
+      "aliases": ["fire door survey", "fire door check"]
+    },
+    {
+      "canonicalName": "Fire-resisting doorset",
+      "entityType": "asset_component",
+      "aliases": ["fire doorset", "fire door set", "fire-rated doorset"],
+      "children": [
+        { "canonicalName": "FD30 doorset", "entityType": "asset_component", "aliases": [] },
+        { "canonicalName": "FD60 doorset", "entityType": "asset_component", "aliases": [] },
+        { "canonicalName": "Smoke-control doorset", "entityType": "asset_component", "aliases": [] }
+      ]
+    },
+    { "canonicalName": "Door leaf", "entityType": "asset_component", "aliases": [] },
+    { "canonicalName": "Door frame", "entityType": "asset_component", "aliases": [] },
+    { "canonicalName": "Door closer", "entityType": "asset_component", "aliases": ["overhead closer"] },
+    { "canonicalName": "Intumescent seal", "entityType": "asset_component", "aliases": ["fire seal"] },
+    { "canonicalName": "Smoke seal", "entityType": "asset_component", "aliases": ["brush seal"] },
+    { "canonicalName": "Damaged door leaf", "entityType": "problem_defect", "aliases": [] },
+    { "canonicalName": "Excessive door gaps", "entityType": "problem_defect", "aliases": ["gaps around fire door"] },
+    { "canonicalName": "Failed door closer", "entityType": "problem_defect", "aliases": ["door not closing"] },
+    { "canonicalName": "Site survey", "entityType": "subservice_process", "aliases": ["door survey"] },
+    { "canonicalName": "Installation records", "entityType": "subservice_process", "aliases": ["handover documentation"] },
+    { "canonicalName": "Certification", "entityType": "commercial", "aliases": [] },
+    { "canonicalName": "Quotation", "entityType": "commercial", "aliases": ["quote"] },
+    { "canonicalName": "Care home", "entityType": "customer_property", "aliases": ["care homes", "residential care home"] },
+    { "canonicalName": "Hotel", "entityType": "customer_property", "aliases": [] },
+    { "canonicalName": "HMO", "entityType": "customer_property", "aliases": ["house in multiple occupation"] }
+  ],
+  "relationships": [
+    { "subject": "Fire door installation", "predicate": "installs", "object": "Fire-resisting doorset" },
+    { "subject": "Fire-resisting doorset", "predicate": "contains", "object": "Door leaf" },
+    { "subject": "Fire-resisting doorset", "predicate": "contains", "object": "Door frame" },
+    { "subject": "Fire-resisting doorset", "predicate": "contains", "object": "Door closer" },
+    { "subject": "Fire-resisting doorset", "predicate": "contains", "object": "Intumescent seal" },
+    { "subject": "Fire-resisting doorset", "predicate": "contains", "object": "Smoke seal" },
+    { "subject": "Fire door installation", "predicate": "solves", "object": "Damaged door leaf" },
+    { "subject": "Fire door inspection", "predicate": "solves", "object": "Excessive door gaps" },
+    { "subject": "Fire door installation", "predicate": "produces_deliverable", "object": "Installation records" },
+    { "subject": "Fire door installation", "predicate": "serves", "object": "Care home" },
+    { "subject": "FD30 doorset", "predicate": "subtype_of", "object": "Fire-resisting doorset" },
+    { "subject": "FD60 doorset", "predicate": "subtype_of", "object": "Fire-resisting doorset" }
+  ]
+}
