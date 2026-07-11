@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "entity-builder-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Public (browser-safe) values only. Secrets go in via `wrangler secret put`.
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://ycehhndxcoiinjvdngph.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_N7GjEH36rA0BXJdelicpdA_HFZ_1W9c"
+  }
+}
