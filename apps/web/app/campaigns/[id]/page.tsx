@@ -9,10 +9,10 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; q?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; q?: string }>;
 }) {
   const { id } = await params;
-  const { error, q } = await searchParams;
+  const { error, notice, q } = await searchParams;
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -45,6 +45,7 @@ export default async function CampaignPage({
     <div>
       <h1>{campaign.name}</h1>
       {error ? <p className="error">{error}</p> : null}
+      {notice ? <p style={{ color: "#15803d" }}>{notice}</p> : null}
 
       <h2>Sites</h2>
       <div className="card">
@@ -78,7 +79,7 @@ export default async function CampaignPage({
           <input type="hidden" name="campaignId" value={campaign.id} />
           <input type="hidden" name="organisationId" value={campaign.organisation_id} />
           <input name="name" placeholder="Site name" required />
-          <input name="baseUrl" placeholder="https://example.com" type="url" required />
+          <input name="baseUrl" placeholder="example.com or https://example.com" required />
           <button>Add site</button>
         </form>
       </div>

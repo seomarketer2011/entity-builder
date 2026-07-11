@@ -7,7 +7,6 @@ import {
   INCREMENTAL_REPULL_DAYS,
   addDays,
 } from "@entity-builder/gsc";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,11 +20,18 @@ export async function addSite(formData: FormData): Promise<void> {
   let domain: string;
   let baseUrl: string;
   try {
-    const parsed = new URL(baseUrlRaw);
+    // Accept bare domains ("example.com") as well as full URLs.
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrlRaw)
+      ? baseUrlRaw
+      : `https://${baseUrlRaw}`;
+    const parsed = new URL(withScheme);
+    if (!parsed.hostname.includes(".")) throw new Error("no dot");
     domain = parsed.hostname;
     baseUrl = parsed.origin;
   } catch {
-    redirect(`/campaigns/${campaignId}?error=${encodeURIComponent("Invalid site URL")}`);
+    redirect(
+      `/campaigns/${campaignId}?error=${encodeURIComponent(`"${baseUrlRaw}" is not a valid domain`)}`,
+    );
   }
 
   const supabase = await createClient();
@@ -37,7 +43,7 @@ export async function addSite(formData: FormData): Promise<void> {
     base_url: baseUrl,
   });
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  revalidatePath(`/campaigns/${campaignId}`);
+  redirect(`/campaigns/${campaignId}?notice=${encodeURIComponent(`Site "${name}" added — now link its property below`)}`);
 }
 
 export async function linkPropertyToSite(formData: FormData): Promise<void> {
@@ -52,7 +58,9 @@ export async function linkPropertyToSite(formData: FormData): Promise<void> {
     .update({ site_id: siteId || null })
     .eq("id", propertyId);
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  revalidatePath(`/campaigns/${campaignId}`);
+  redirect(
+    `/campaigns/${campaignId}?notice=${encodeURIComponent(siteId ? "Property linked — you can now queue a sync" : "Property unlinked")}`,
+  );
 }
 
 export async function queueSyncJob(formData: FormData): Promise<void> {
@@ -80,5 +88,7 @@ export async function queueSyncJob(formData: FormData): Promise<void> {
     date_to: dateTo,
   });
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  revalidatePath(`/campaigns/${campaignId}`);
+  redirect(
+    `/campaigns/${campaignId}?notice=${encodeURIComponent(`${kind} job queued — the worker will pick it up shortly`)}`,
+  );
 }
