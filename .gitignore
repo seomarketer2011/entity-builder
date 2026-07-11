@@ -8,3 +8,5 @@ coverage/
 .env.*.local
 .DS_Store
 supabase/.temp/
+.open-next/
+.wrangler/
