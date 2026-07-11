@@ -7,12 +7,12 @@ see SECURITY.md for where credentials live.
 
 | What | Value |
 | --- | --- |
-| Account name | `Zhl102600813@gmail.com's Account` |
-| Account email | `Zhl102600813@gmail.com` |
-| Account ID | `da9a9a141346a7571024b0283c0c60e3` |
+| Account name | `Seomarketer2011@yahoo.co.uk's Account` |
+| Account email | `Seomarketer2011@yahoo.co.uk` |
+| Account ID | `44799b719f2192a9f066f425aaff3106` |
 | Worker name | `entity-builder-web` |
-| workers.dev subdomain | `entity-builder-hq.workers.dev` |
-| App URL | `https://entity-builder-web.entity-builder-hq.workers.dev` |
+| workers.dev subdomain | `seomarketer2011.workers.dev` |
+| App URL | `https://entity-builder-web.seomarketer2011.workers.dev` |
 
 The auth in use is a **Global API Key with access to many accounts**
 (agency/super-admin setup). The account above was selected by the
@@ -45,8 +45,8 @@ GitHub integration once the branch is merged to `main`.
 
 ## Not yet deployed
 
-- `apps/worker` (GSC sync worker) — needs a container host (Railway/Fly)
-  or a Cloudflare Worker cron adaptation. Requires `DATABASE_URL`,
-  `GOOGLE_OAUTH_CLIENT_ID/SECRET`, `TOKEN_ENCRYPTION_KEY`.
+- Sync engine: `/api/internal/sync` on the web worker (one month-window
+  per call), triggered by the `entity-builder-cron` worker every 2 min.
+  `apps/worker` (container poll-loop variant) remains for self-hosting.
 - Google OAuth client — not created yet (docs/SETUP.md §2). Redirect URI:
-  `https://entity-builder-web.entity-builder-hq.workers.dev/api/google/callback`
+  `https://entity-builder-web.seomarketer2011.workers.dev/api/google/callback`
