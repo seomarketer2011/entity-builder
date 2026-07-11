@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "entity-builder-cron",
+  "main": "src/index.ts",
+  "account_id": "44799b719f2192a9f066f425aaff3106",
+  "compatibility_date": "2026-06-01",
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  },
+  "vars": {
+    "SYNC_ENDPOINT": "https://entity-builder-web.seomarketer2011.workers.dev/api/internal/sync"
+  }
+}

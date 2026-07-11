@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "entity-builder-web",
   "main": ".open-next/worker.js",
+  "account_id": "44799b719f2192a9f066f425aaff3106",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -15,6 +16,6 @@
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://ycehhndxcoiinjvdngph.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_N7GjEH36rA0BXJdelicpdA_HFZ_1W9c",
-    "GOOGLE_OAUTH_REDIRECT_URI": "https://entity-builder-web.entity-builder-hq.workers.dev/api/google/callback"
+    "GOOGLE_OAUTH_REDIRECT_URI": "https://entity-builder-web.seomarketer2011.workers.dev/api/google/callback"
   }
 }
