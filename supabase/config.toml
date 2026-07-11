@@ -1,0 +1,13 @@
+# Supabase project configuration — enables the CLI and the GitHub
+# integration to recognise this directory and apply supabase/migrations/.
+project_id = "entity-builder"
+
+[db]
+major_version = 17
+
+[auth]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
