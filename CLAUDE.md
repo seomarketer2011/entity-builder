@@ -37,8 +37,12 @@ location).
 - `packages/scoring` — deterministic engines: entity validation score,
   page-creation gate, opportunity priority score. Pure functions, fully tested.
 - `packages/entity-engine` — normalisation, alias handling, candidate pipeline.
-- `apps/web` — Next.js dashboard (Phase 1+).
-- `apps/worker` — ingestion/analysis worker (Phase 1+).
+- `packages/gsc` — Google OAuth, token crypto, Search Console client,
+  sync planning/orchestration. Pure logic, injected fetch, fully tested.
+- `packages/database` — pg pool, idempotent GSC upserts, sync-job repo.
+- `apps/web` — Next.js dashboard. All data access via the user's Supabase
+  session (RLS applies); never the service-role key.
+- `apps/worker` — sync worker (service context; explicit scoping).
 - `fixtures/` — realistic test data (fire-protection example graph).
 
 ## Before implementing an issue

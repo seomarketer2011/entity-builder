@@ -55,5 +55,8 @@ Supabase instance.
 
 ## Build phases
 
-See `docs/ROADMAP.md`. Current status: **Phase 0 complete** (schema, domain
-types, scoring engines, docs). Next: Phase 1 (auth, GSC ingestion, explorer).
+See `docs/ROADMAP.md`. Current status: **Phase 1 code complete** — auth,
+tenancy CRUD, Google OAuth with encrypted token storage, resumable GSC
+backfill + incremental sync worker, sync dashboard, and GSC explorer.
+Cloud configuration steps are in `docs/SETUP.md`. Next: Phase 2
+(deterministic opportunity detectors).

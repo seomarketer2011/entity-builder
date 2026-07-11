@@ -15,14 +15,17 @@ a GitHub issue. Definition of done in CLAUDE.md applies to all.
 - [x] Fire-protection fixture graph
 - [x] CI (typecheck + tests)
 
-## Phase 1 — Auth & GSC ingestion
-1. Supabase project setup; apply migrations; RLS policies + policy tests
-2. Auth (Supabase auth), organisations/campaigns/networks/sites CRUD
-3. Google OAuth connect flow; encrypted token store; property discovery
-4. Backfill job (16 months, paginated, resumable) + incremental daily sync
-5. Sync job dashboard (status, errors, row counts)
-6. GSC explorer UI
-7. Materialised views + refresh scheduling
+## Phase 1 — Auth & GSC ingestion (code complete ✅ — cloud setup per docs/SETUP.md)
+1. [x] Migrations + RLS policies + policy tests (`supabase/tests/rls_test.sql`)
+2. [x] Auth (Supabase auth), organisations/campaigns/sites CRUD
+       (networks CRUD UI deferred to Phase 4 where networks first matter)
+3. [x] Google OAuth connect flow; AES-256-GCM token store; property discovery
+4. [x] Backfill job (16 months, monthly windows, paginated) + incremental
+       sync with 3-day re-pull (`packages/gsc`, `apps/worker`)
+5. [x] Sync job dashboard (status, errors, row counts)
+6. [x] GSC explorer (query/page/date, RLS-safe SECURITY INVOKER aggregates)
+7. [x] Materialised views + refresh function; scheduling via pg_cron
+       (docs/SETUP.md §7 — in-app scheduler as Phase 2 follow-up)
 
 ## Phase 2 — Opportunity Engine V1 (deterministic detectors)
 8. Expected-CTR curve per site; `ctr_gap` detector

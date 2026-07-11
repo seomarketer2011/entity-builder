@@ -1,16 +1,16 @@
 {
-  "name": "@entity-builder/worker",
+  "name": "@entity-builder/database",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Ingestion & analysis worker: polls gsc_sync_jobs and runs GSC syncs.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "start": "node --experimental-strip-types src/main.ts"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@entity-builder/database": "workspace:*",
+    "@entity-builder/domain": "workspace:*",
     "@entity-builder/gsc": "workspace:*",
     "pg": "^8.13.0"
   },
