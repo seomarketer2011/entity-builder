@@ -28,6 +28,9 @@ interface OpportunityRow {
 const TYPE_LABELS: Record<string, string> = {
   ctr_gap: "Weak CTR",
   striking_distance: "Within reach",
+  declining_page: "Declining",
+  cannibalisation: "Cannibalisation",
+  unowned_cluster: "Unowned demand",
 };
 
 export default async function OpportunitiesPage({

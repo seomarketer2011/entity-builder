@@ -54,8 +54,18 @@ service genuinely applies network-wide. Output quantifies the gap (e.g. "74
 of 99 sites lack a dedicated page; the 11 with one earn 3.4x the clicks for
 this cluster").
 
-Also in V1: `declining_page`, `rising_query` (trend deltas over rolling
-windows).
+### Implemented V2 thresholds (`packages/scoring/src/detectors-v2.ts`)
+
+- `declining_page`: previous 28-day window ≥ 20 clicks AND current window
+  below 70% of previous.
+- `cannibalisation`: query with ≥ 50 impressions where ≥ 2 pages each take
+  ≥ 25% of impressions.
+- `unowned_cluster`: lexical cluster (token Jaccard ≥ 0.5) with ≥ 2 member
+  queries, ≥ 150 combined impressions, and best member position > 25 (or
+  unranked). Branded queries excluded. Output is advisory: a new page must
+  still pass the page-creation gate.
+
+Still planned: `rising_query`, per-page attribution for `ctr_gap`.
 
 ## Priority score
 

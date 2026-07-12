@@ -1,4 +1,13 @@
-import { runDetectors, type QueryTotals } from "@entity-builder/scoring";
+import {
+  detectCannibalisation,
+  detectDecliningPages,
+  detectUnownedClusters,
+  runDetectors,
+  type FindingV2,
+  type PageTotals,
+  type QueryPageTotals,
+  type QueryTotals,
+} from "@entity-builder/scoring";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +44,10 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
   const to = today.toISOString().slice(0, 10);
   const from = new Date(today.getTime() - WINDOW_DAYS * 86400000).toISOString().slice(0, 10);
 
+  const prevFrom = new Date(today.getTime() - 2 * WINDOW_DAYS * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
   const { data: totals, error } = await db.rpc("gsc_query_totals", {
     p_site_id: site.id,
     p_from: from,
@@ -42,8 +55,61 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
     p_limit: 1000,
   });
   if (error) throw new Error(`aggregation failed for ${site.name}: ${error.message}`);
+  const queryTotals = (totals ?? []) as QueryTotals[];
 
-  const findings = runDetectors((totals ?? []) as QueryTotals[], { siteDomain: site.domain });
+  const v1 = runDetectors(queryTotals, { siteDomain: site.domain });
+
+  // V2 detectors — each degrades gracefully if its inputs are unavailable.
+  const v2: FindingV2[] = [];
+  const notes: string[] = [];
+
+  const [currentPages, previousPages] = await Promise.all([
+    db.rpc("gsc_page_totals", { p_site_id: site.id, p_from: from, p_to: to, p_limit: 1000 }),
+    db.rpc("gsc_page_totals", { p_site_id: site.id, p_from: prevFrom, p_to: from, p_limit: 1000 }),
+  ]);
+  if (!currentPages.error && !previousPages.error) {
+    v2.push(
+      ...detectDecliningPages(
+        (currentPages.data ?? []) as PageTotals[],
+        (previousPages.data ?? []) as PageTotals[],
+      ),
+    );
+  } else {
+    notes.push("declining_page skipped: page totals unavailable");
+  }
+
+  const queryPage = await db.rpc("gsc_query_page_totals", {
+    p_site_id: site.id,
+    p_from: from,
+    p_to: to,
+    p_limit: 3000,
+  });
+  if (!queryPage.error) {
+    v2.push(...detectCannibalisation((queryPage.data ?? []) as QueryPageTotals[]));
+  } else {
+    notes.push("cannibalisation skipped: apply migration 0010 (gsc_query_page_totals)");
+  }
+
+  v2.push(...detectUnownedClusters(queryTotals, { siteDomain: site.domain }));
+
+  const findings = [
+    ...v1.map((f) => ({
+      type: f.type as string,
+      title: f.title,
+      explanation: f.explanation,
+      recommendedAction: f.recommendedAction,
+      evidence: { window: { from, to }, queryTotals: f.evidence },
+      priority: f.priority,
+    })),
+    ...v2.map((f) => ({
+      type: f.type as string,
+      title: f.title,
+      explanation: f.explanation,
+      recommendedAction: f.recommendedAction,
+      evidence: { window: { from, to }, ...(f.evidence as object) },
+      priority: f.priority,
+    })),
+  ];
 
   // Regenerate open V1 opportunities for this site.
   await db
@@ -75,7 +141,7 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
     await db.from("opportunity_evidence").insert({
       opportunity_id: opportunity.id,
       kind: "gsc_rows",
-      payload: { window: { from, to }, queryTotals: finding.evidence },
+      payload: finding.evidence,
     });
     await db.from("opportunity_scores").insert({
       opportunity_id: opportunity.id,
@@ -90,7 +156,7 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
     });
   }
 
-  return { site: site.name, findings: findings.length };
+  return { site: site.name, findings: findings.length, ...(notes.length ? { notes } : {}) };
 }
 
 export async function POST(request: Request) {

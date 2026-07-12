@@ -1,0 +1,61 @@
+{
+  "industry": { "slug": "locksmith-services", "name": "Locksmith services" },
+  "entities": [
+    { "canonicalName": "Emergency locksmith", "entityType": "service", "aliases": ["24 hour locksmith", "24hr locksmith", "emergency lockout service"] },
+    { "canonicalName": "Lock replacement", "entityType": "service", "aliases": ["lock change", "changing locks", "replace locks"] },
+    { "canonicalName": "Lock repair", "entityType": "service", "aliases": ["lock fixing", "broken lock repair"] },
+    { "canonicalName": "Lock installation", "entityType": "service", "aliases": ["lock fitting", "new lock installation", "door lock installer"] },
+    { "canonicalName": "Burglary damage repair", "entityType": "service", "aliases": ["break in repair", "burglary repair", "boarding up"] },
+    { "canonicalName": "uPVC door lock specialist", "entityType": "service", "aliases": ["upvc door locks", "upvc lock repair", "upvc door lock mechanism"] },
+    { "canonicalName": "Key cutting", "entityType": "service", "aliases": ["keys cut", "key duplication"] },
+    { "canonicalName": "Smart lock installation", "entityType": "service", "aliases": ["smart locks", "keyless entry installation", "smart door lock fitting"] },
+    { "canonicalName": "Access control installation", "entityType": "service", "aliases": ["access control systems", "door entry systems", "keypad entry"] },
+    { "canonicalName": "Safe opening", "entityType": "service", "aliases": ["safe cracking", "locked safe opening"] },
+
+    { "canonicalName": "Euro cylinder lock", "entityType": "asset_component", "aliases": ["euro cylinder", "euro lock"] },
+    { "canonicalName": "Anti-snap cylinder", "entityType": "asset_component", "aliases": ["anti snap lock", "snap resistant cylinder", "snap safe lock"] },
+    { "canonicalName": "Mortice lock", "entityType": "asset_component", "aliases": ["mortice deadlock", "5 lever mortice lock", "mortise lock"] },
+    { "canonicalName": "Multipoint locking mechanism", "entityType": "asset_component", "aliases": ["multi point lock", "multipoint lock"] },
+    { "canonicalName": "Night latch", "entityType": "asset_component", "aliases": ["yale lock", "rim lock", "nightlatch"] },
+    { "canonicalName": "Door handle and gearbox", "entityType": "asset_component", "aliases": ["upvc gearbox", "door lock gearbox", "door handle mechanism"] },
+
+    { "canonicalName": "Locked out", "entityType": "problem_defect", "aliases": ["lockout", "locked out of house", "locked out of my house", "lost keys"] },
+    { "canonicalName": "Snapped key in lock", "entityType": "problem_defect", "aliases": ["broken key in lock", "key snapped", "key stuck in lock"] },
+    { "canonicalName": "Stiff or failing lock", "entityType": "problem_defect", "aliases": ["lock not turning", "key wont turn", "stiff lock"] },
+    { "canonicalName": "Door not locking", "entityType": "problem_defect", "aliases": ["upvc door wont lock", "door wont lock", "door lock not catching"] },
+    { "canonicalName": "After a burglary", "entityType": "problem_defect", "aliases": ["after break in", "burgled"] },
+
+    { "canonicalName": "British Standard BS3621", "entityType": "standard_regulation", "aliases": ["bs3621", "bs 3621", "insurance approved lock"] },
+    { "canonicalName": "TS007 kitemark", "entityType": "standard_regulation", "aliases": ["ts007", "3 star cylinder", "kitemark lock"] },
+
+    { "canonicalName": "Homeowner", "entityType": "customer_property", "aliases": ["residential locksmith", "home locksmith", "house locksmith"] },
+    { "canonicalName": "Landlord", "entityType": "customer_property", "aliases": ["rental property", "tenant lock change", "landlord locksmith"] },
+    { "canonicalName": "Commercial premises", "entityType": "customer_property", "aliases": ["commercial locksmith", "business locksmith", "shop locksmith", "office locksmith"] },
+
+    { "canonicalName": "Call-out fee", "entityType": "commercial", "aliases": ["no call out fee", "call out charge", "locksmith prices"] },
+    { "canonicalName": "Response time", "entityType": "commercial", "aliases": ["30 minute response", "fast locksmith", "locksmith near me now"] },
+    { "canonicalName": "DBS-checked locksmith", "entityType": "commercial", "aliases": ["dbs checked", "vetted locksmith", "police checked locksmith"] },
+    { "canonicalName": "Non-destructive entry", "entityType": "commercial", "aliases": ["no damage entry", "non destructive entry", "lock picking service"] }
+  ],
+  "relationships": [
+    { "subject": "Emergency locksmith", "predicate": "solves", "object": "Locked out" },
+    { "subject": "Emergency locksmith", "predicate": "solves", "object": "Snapped key in lock" },
+    { "subject": "Emergency locksmith", "predicate": "produces_deliverable", "object": "Non-destructive entry" },
+    { "subject": "Lock replacement", "predicate": "installs", "object": "Euro cylinder lock" },
+    { "subject": "Lock replacement", "predicate": "installs", "object": "Anti-snap cylinder" },
+    { "subject": "Lock replacement", "predicate": "installs", "object": "Mortice lock" },
+    { "subject": "Lock installation", "predicate": "installs", "object": "Night latch" },
+    { "subject": "Lock repair", "predicate": "solves", "object": "Stiff or failing lock" },
+    { "subject": "Lock repair", "predicate": "solves", "object": "Door not locking" },
+    { "subject": "uPVC door lock specialist", "predicate": "repairs", "object": "Multipoint locking mechanism" },
+    { "subject": "uPVC door lock specialist", "predicate": "repairs", "object": "Door handle and gearbox" },
+    { "subject": "uPVC door lock specialist", "predicate": "solves", "object": "Door not locking" },
+    { "subject": "Burglary damage repair", "predicate": "solves", "object": "After a burglary" },
+    { "subject": "Mortice lock", "predicate": "regulated_by", "object": "British Standard BS3621" },
+    { "subject": "Anti-snap cylinder", "predicate": "regulated_by", "object": "TS007 kitemark" },
+    { "subject": "Lock replacement", "predicate": "serves", "object": "Landlord" },
+    { "subject": "Emergency locksmith", "predicate": "serves", "object": "Homeowner" },
+    { "subject": "Access control installation", "predicate": "serves", "object": "Commercial premises" },
+    { "subject": "Smart lock installation", "predicate": "serves", "object": "Homeowner" }
+  ]
+}

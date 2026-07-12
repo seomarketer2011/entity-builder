@@ -45,13 +45,14 @@ export default async function CampaignPage({
     <div>
       <h1>
         {campaign.name}{" "}
-        <a
-          className="button"
-          style={{ float: "right" }}
-          href={`/campaigns/${id}/opportunities`}
-        >
-          Opportunities →
-        </a>
+        <span style={{ float: "right", display: "inline-flex", gap: "0.5rem" }}>
+          <a className="button secondary" href={`/campaigns/${id}/entities`}>
+            Entity graph
+          </a>
+          <a className="button" href={`/campaigns/${id}/opportunities`}>
+            Opportunities →
+          </a>
+        </span>
       </h1>
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p style={{ color: "#15803d" }}>{notice}</p> : null}
