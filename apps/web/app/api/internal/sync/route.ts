@@ -51,6 +51,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // Reclaim jobs orphaned by an aborted invocation: 'running' with no
+  // progress heartbeat for 5+ minutes goes back to 'queued'. Progress is
+  // persisted after every window, so at most one window repeats (idempotent
+  // upserts make the repeat harmless).
+  const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
+  await db
+    .from("gsc_sync_jobs")
+    .update({ status: "queued" })
+    .eq("status", "running")
+    .lt("started_at", staleBefore);
+
   // Oldest queued job, claimed with a compare-and-set so concurrent
   // invocations never double-process.
   const { data: candidates } = await db
@@ -122,7 +133,7 @@ export async function POST(request: Request) {
 
     // Process month-sized windows until the job finishes or the wall-clock
     // budget runs out; remaining windows continue on the next cron tick.
-    const WALL_BUDGET_MS = 20_000;
+    const WALL_BUDGET_MS = 12_000;
     const startedAt = Date.now();
     let cursor = job.date_from;
     let rowsThisRun = 0;
@@ -166,7 +177,28 @@ export async function POST(request: Request) {
 
       if (windowEnd >= job.date_to) break;
       cursor = addDays(windowEnd, 1);
-      if (Date.now() - startedAt > WALL_BUDGET_MS) break;
+      // Persist progress + heartbeat after every window, so an aborted
+      // invocation loses at most one (idempotently repeatable) window.
+      await db
+        .from("gsc_sync_jobs")
+        .update({
+          date_from: cursor,
+          rows_imported: (job.rows_imported ?? 0) + rowsThisRun,
+          started_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      if (Date.now() - startedAt > WALL_BUDGET_MS) {
+        // hand the rest to the next tick
+        await db.from("gsc_sync_jobs").update({ status: "queued" }).eq("id", job.id);
+        return NextResponse.json({
+          jobId: job.id,
+          window: { from: job.date_from, to: windowEnd },
+          windowsThisRun,
+          rowsInWindow: rowsThisRun,
+          totalRows: (job.rows_imported ?? 0) + rowsThisRun,
+          done: false,
+        });
+      }
     }
 
     const rowsInWindow = rowsThisRun;
