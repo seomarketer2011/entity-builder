@@ -43,10 +43,15 @@ Schema state: migrations 0001–0008 applied manually via SQL Editor
 (2026-07-11). Future migrations: apply via SQL Editor, or connect the
 GitHub integration once the branch is merged to `main`.
 
-## Not yet deployed
+## Fully deployed pipeline
 
-- Sync engine: `/api/internal/sync` on the web worker (one month-window
-  per call), triggered by the `entity-builder-cron` worker every 2 min.
-  `apps/worker` (container poll-loop variant) remains for self-hosting.
-- Google OAuth client — not created yet (docs/SETUP.md §2). Redirect URI:
-  `https://entity-builder-web.seomarketer2011.workers.dev/api/google/callback`
+- Plan: **Workers Paid** on this account (2026-07-12); `limits.cpu_ms`
+  raised for heavy backfills.
+- Sync engine: `/api/internal/sync` on the web worker (multi-window per
+  call, per-window progress persistence, 2-min stale reclaim).
+- Scheduler: `entity-builder-cron` worker — every 2 min sync step,
+  05:30 UTC daily incremental queueing, 07:00 UTC opportunity analysis.
+- Google OAuth client: configured (redirect
+  `https://entity-builder-web.seomarketer2011.workers.dev/api/google/callback`);
+  active connection `pauldanielstone@gmail.com` (27 properties).
+- `apps/worker` (container poll-loop variant) remains for self-hosting.

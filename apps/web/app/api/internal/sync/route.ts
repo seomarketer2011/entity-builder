@@ -138,7 +138,9 @@ export async function POST(request: Request) {
 
     // Process month-sized windows until the job finishes or the wall-clock
     // budget runs out; remaining windows continue on the next cron tick.
-    const WALL_BUDGET_MS = 12_000;
+    // Workers Paid + raised cpu_ms make longer invocations safe; progress
+    // still persists per window so interruptions stay cheap.
+    const WALL_BUDGET_MS = 45_000;
     const startedAt = Date.now();
     let cursor = job.date_from;
     let rowsThisRun = 0;

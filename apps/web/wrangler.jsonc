@@ -12,6 +12,10 @@
   "observability": {
     "enabled": true
   },
+  // Workers Paid: allow heavy backfill invocations (default is 30s CPU).
+  "limits": {
+    "cpu_ms": 300000
+  },
   // Public (browser-safe) values only. Secrets go in via `wrangler secret put`.
   "vars": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://ycehhndxcoiinjvdngph.supabase.co",
