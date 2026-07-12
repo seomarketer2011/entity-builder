@@ -5,7 +5,9 @@
   "account_id": "44799b719f2192a9f066f425aaff3106",
   "compatibility_date": "2026-06-01",
   "triggers": {
-    "crons": ["*/2 * * * *"]
+    // every 2 min: process one queued sync step; daily 05:30 UTC: queue
+    // incremental jobs for all linked properties
+    "crons": ["*/2 * * * *", "30 5 * * *"]
   },
   // Same-account workers.dev fetches are blocked (error 1042); call the
   // web worker through a service binding instead.
