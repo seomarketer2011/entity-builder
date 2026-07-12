@@ -22,9 +22,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@entity-builder/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@entity-builder/gsc':
         specifier: workspace:*
         version: link:../../packages/gsc
+      '@entity-builder/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
       '@supabase/ssr':
         specifier: ^0.6.1
         version: 0.6.1(@supabase/supabase-js@2.110.2)

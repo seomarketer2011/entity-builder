@@ -14,7 +14,9 @@
     "preview:cf": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
   "dependencies": {
+    "@entity-builder/domain": "workspace:*",
     "@entity-builder/gsc": "workspace:*",
+    "@entity-builder/scoring": "workspace:*",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.47.0",
     "next": "^15.1.0",

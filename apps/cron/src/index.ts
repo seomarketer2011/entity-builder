@@ -12,10 +12,14 @@ interface Env {
 
 export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    const isDaily = event.cron === "30 5 * * *";
-    const endpoint = isDaily
-      ? env.SYNC_ENDPOINT.replace("/sync", "/schedule-daily")
-      : env.SYNC_ENDPOINT;
+    const suffix =
+      event.cron === "30 5 * * *"
+        ? "/schedule-daily"
+        : event.cron === "0 7 * * *"
+          ? "/analyze"
+          : "/sync";
+    const isDaily = suffix !== "/sync";
+    const endpoint = env.SYNC_ENDPOINT.replace("/sync", suffix);
     ctx.waitUntil(
       (async () => {
         const response = await env.WEB.fetch(endpoint, {

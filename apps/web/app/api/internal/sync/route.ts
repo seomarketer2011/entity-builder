@@ -120,42 +120,57 @@ export async function POST(request: Request) {
     const fetchImpl = fetch as unknown as FetchLike;
     const grant = await refreshAccessToken(fetchImpl, { clientId, clientSecret }, refreshToken);
 
-    // One month-sized window per invocation.
-    const monthEnd = addDays(addMonths(job.date_from, 1), -1);
-    const windowEnd = monthEnd < job.date_to ? monthEnd : job.date_to;
+    // Process month-sized windows until the job finishes or the wall-clock
+    // budget runs out; remaining windows continue on the next cron tick.
+    const WALL_BUDGET_MS = 20_000;
+    const startedAt = Date.now();
+    let cursor = job.date_from;
+    let rowsThisRun = 0;
+    let windowsThisRun = 0;
+    let windowEnd = cursor;
 
-    let rowsInWindow = 0;
-    await fetchAllRows(
-      fetchImpl,
-      grant.accessToken,
-      property.property_uri,
-      { startDate: job.date_from, endDate: windowEnd, dimensions: [...SYNC_DIMENSIONS] },
-      async (apiRows) => {
-        const mapped = apiRows.map((r) => mapApiRow(r));
-        for (let i = 0; i < mapped.length; i += BATCH) {
-          const chunk = mapped.slice(i, i + BATCH).map((row) => ({
-            property_id: job.property_id,
-            site_id: property.site_id,
-            date: row.date,
-            page: row.page,
-            query: row.query,
-            country: row.country,
-            device: row.device,
-            search_type: row.searchType,
-            clicks: row.clicks,
-            impressions: row.impressions,
-            position: row.position,
-          }));
-          const { error } = await db.from("gsc_daily_query_page").upsert(chunk, {
-            onConflict: "property_id,date,page,query,country,device,search_type",
-          });
-          if (error) throw new Error(`upsert failed: ${error.message}`);
-          rowsInWindow += chunk.length;
-        }
-      },
-    );
+    for (;;) {
+      const monthEnd = addDays(addMonths(cursor, 1), -1);
+      windowEnd = monthEnd < job.date_to ? monthEnd : job.date_to;
 
-    const totalRows = (job.rows_imported ?? 0) + rowsInWindow;
+      await fetchAllRows(
+        fetchImpl,
+        grant.accessToken,
+        property.property_uri,
+        { startDate: cursor, endDate: windowEnd, dimensions: [...SYNC_DIMENSIONS] },
+        async (apiRows) => {
+          const mapped = apiRows.map((r) => mapApiRow(r));
+          for (let i = 0; i < mapped.length; i += BATCH) {
+            const chunk = mapped.slice(i, i + BATCH).map((row) => ({
+              property_id: job.property_id,
+              site_id: property.site_id,
+              date: row.date,
+              page: row.page,
+              query: row.query,
+              country: row.country,
+              device: row.device,
+              search_type: row.searchType,
+              clicks: row.clicks,
+              impressions: row.impressions,
+              position: row.position,
+            }));
+            const { error } = await db.from("gsc_daily_query_page").upsert(chunk, {
+              onConflict: "property_id,date,page,query,country,device,search_type",
+            });
+            if (error) throw new Error(`upsert failed: ${error.message}`);
+            rowsThisRun += chunk.length;
+          }
+        },
+      );
+      windowsThisRun++;
+
+      if (windowEnd >= job.date_to) break;
+      cursor = addDays(windowEnd, 1);
+      if (Date.now() - startedAt > WALL_BUDGET_MS) break;
+    }
+
+    const rowsInWindow = rowsThisRun;
+    const totalRows = (job.rows_imported ?? 0) + rowsThisRun;
     const done = windowEnd >= job.date_to;
     if (done) {
       await db
@@ -181,6 +196,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       jobId: job.id,
       window: { from: job.date_from, to: windowEnd },
+      windowsThisRun,
       rowsInWindow,
       totalRows,
       done,

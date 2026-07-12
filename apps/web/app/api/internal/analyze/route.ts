@@ -1,0 +1,144 @@
+import { runDetectors, type QueryTotals } from "@entity-builder/scoring";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Opportunity analysis (V1 detectors). Two callers:
+ *  - the cron worker (bearer SYNC_TOKEN) — analyses every linked site
+ *  - a signed-in user (?campaign=...) — analyses their own campaign now
+ * Each run regenerates OPEN V1 opportunities per site; accepted/dismissed
+ * rows are never touched. Every opportunity stores its evidence rows and
+ * component scores (non-negotiable rule 2).
+ */
+
+const WINDOW_DAYS = 28;
+const DETECTOR_VERSION = "v1";
+
+function admin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("service key not configured");
+  return createSupabaseClient(url, key, { auth: { persistSession: false } });
+}
+
+interface SiteRef {
+  id: string;
+  organisation_id: string;
+  campaign_id: string;
+  name: string;
+}
+
+async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
+  const today = new Date();
+  const to = today.toISOString().slice(0, 10);
+  const from = new Date(today.getTime() - WINDOW_DAYS * 86400000).toISOString().slice(0, 10);
+
+  const { data: totals, error } = await db.rpc("gsc_query_totals", {
+    p_site_id: site.id,
+    p_from: from,
+    p_to: to,
+    p_limit: 1000,
+  });
+  if (error) throw new Error(`aggregation failed for ${site.name}: ${error.message}`);
+
+  const findings = runDetectors((totals ?? []) as QueryTotals[]);
+
+  // Regenerate open V1 opportunities for this site.
+  await db
+    .from("opportunities")
+    .delete()
+    .eq("site_id", site.id)
+    .eq("status", "open")
+    .eq("detector_version", DETECTOR_VERSION);
+
+  for (const finding of findings) {
+    const { data: opportunity, error: insertError } = await db
+      .from("opportunities")
+      .insert({
+        organisation_id: site.organisation_id,
+        campaign_id: site.campaign_id,
+        site_id: site.id,
+        type: finding.type,
+        detector_version: DETECTOR_VERSION,
+        title: finding.title,
+        explanation: finding.explanation,
+        recommended_action: finding.recommendedAction,
+        status: "open",
+        priority: finding.priority.overall,
+      })
+      .select("id")
+      .single();
+    if (insertError || !opportunity) throw new Error(insertError?.message ?? "insert failed");
+
+    await db.from("opportunity_evidence").insert({
+      opportunity_id: opportunity.id,
+      kind: "gsc_rows",
+      payload: { window: { from, to }, queryTotals: finding.evidence },
+    });
+    await db.from("opportunity_scores").insert({
+      opportunity_id: opportunity.id,
+      traffic_potential: finding.priority.components.trafficPotential,
+      confidence: finding.priority.components.confidence,
+      commercial_value: finding.priority.components.commercialValue,
+      page_relevance: finding.priority.components.pageRelevance,
+      strategic_fit: finding.priority.components.strategicFit,
+      implementation_ease: finding.priority.components.implementationEase,
+      network_applicability: finding.priority.components.networkApplicability,
+      overall: finding.priority.overall,
+    });
+  }
+
+  return { site: site.name, findings: findings.length };
+}
+
+export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const campaignId = url.searchParams.get("campaign");
+  const expected = process.env.SYNC_TOKEN;
+  const isCron = !!expected && request.headers.get("authorization") === `Bearer ${expected}`;
+
+  let db;
+  try {
+    db = admin();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "config" },
+      { status: 503 },
+    );
+  }
+
+  let siteFilter: { campaign_id?: string } = {};
+  if (!isCron) {
+    // Signed-in path: verify the caller is a member of the campaign's org.
+    if (!campaignId) return NextResponse.json({ error: "campaign required" }, { status: 400 });
+    const session = await createClient();
+    const {
+      data: { user },
+    } = await session.auth.getUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { data: campaign } = await session
+      .from("campaigns")
+      .select("id")
+      .eq("id", campaignId)
+      .single(); // RLS: only returns it if the user is an org member
+    if (!campaign) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    siteFilter = { campaign_id: campaignId };
+  } else if (campaignId) {
+    siteFilter = { campaign_id: campaignId };
+  }
+
+  let query = db.from("sites").select("id, organisation_id, campaign_id, name");
+  if (siteFilter.campaign_id) query = query.eq("campaign_id", siteFilter.campaign_id);
+  const { data: sites } = await query;
+
+  const results = [];
+  for (const site of (sites ?? []) as SiteRef[]) {
+    try {
+      results.push(await analyseSite(db, site));
+    } catch (error) {
+      results.push({ site: site.name, error: error instanceof Error ? error.message : "failed" });
+    }
+  }
+  return NextResponse.json({ analysed: results });
+}

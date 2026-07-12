@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
-import { addSite, linkPropertyToSite, queueSyncJob } from "./actions";
+import { addSite, deleteSite, linkPropertyToSite, queueSyncJob } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +9,10 @@ export default async function CampaignPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; notice?: string; q?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; q?: string; confirmDelete?: string }>;
 }) {
   const { id } = await params;
-  const { error, notice, q } = await searchParams;
+  const { error, notice, q, confirmDelete } = await searchParams;
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -43,7 +43,16 @@ export default async function CampaignPage({
 
   return (
     <div>
-      <h1>{campaign.name}</h1>
+      <h1>
+        {campaign.name}{" "}
+        <a
+          className="button"
+          style={{ float: "right" }}
+          href={`/campaigns/${id}/opportunities`}
+        >
+          Opportunities →
+        </a>
+      </h1>
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p style={{ color: "#15803d" }}>{notice}</p> : null}
 
@@ -65,10 +74,31 @@ export default async function CampaignPage({
                 <tr key={s.id}>
                   <td>{s.name}</td>
                   <td>{s.domain}</td>
-                  <td>
+                  <td style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
                     <a className="button secondary" href={`/campaigns/${id}/explorer?site=${s.id}`}>
                       Explorer
                     </a>
+                    {confirmDelete === s.id ? (
+                      <form action={deleteSite} style={{ margin: 0, display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
+                        <input type="hidden" name="campaignId" value={id} />
+                        <input type="hidden" name="siteId" value={s.id} />
+                        <span className="error">Deletes this site AND its imported data.</span>
+                        <button style={{ background: "#b91c1c", borderColor: "#b91c1c" }}>
+                          Yes, delete
+                        </button>
+                        <a className="button secondary" href={`/campaigns/${id}`}>
+                          Cancel
+                        </a>
+                      </form>
+                    ) : (
+                      <a
+                        className="button secondary"
+                        style={{ color: "#b91c1c" }}
+                        href={`/campaigns/${id}?confirmDelete=${s.id}`}
+                      >
+                        Delete
+                      </a>
+                    )}
                   </td>
                 </tr>
               ))}

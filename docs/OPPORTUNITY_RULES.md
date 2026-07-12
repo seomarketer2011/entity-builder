@@ -7,17 +7,27 @@ AI may narrate results; it never calculates the score.
 
 ## Detector V1 set
 
-### 1. High impressions, weak CTR (`ctr_gap`)
-Query/page pairs with substantial impressions whose CTR falls below the
-expected CTR for their average position (expected-CTR curve computed per
-site from its own GSC data, falling back to network-level curve).
+### 1. High impressions, weak CTR (`ctr_gap`) — implemented (V1)
+Queries at average position ≤ 10 with ≥ 100 impressions in the 28-day
+window whose CTR is below **50% of the expected CTR** for that position.
+V1 expected-CTR curve (industry-average; per-site fitted curve is a
+planned upgrade): pos 1: 28%, 2: 15%, 3: 11%, 4: 8%, 5: 7%, 6: 5%,
+7: 4%, 8: 3%, 9: 2.5%, 10: 2.2%. Constants:
+`packages/scoring/src/detectors.ts` (`CTR_GAP`, `EXPECTED_CTR`).
 Recommendations: title/description alignment with dominant intent, missing
 commercial qualifier, query–page mismatch fix.
 
-### 2. Ranking within reach (`striking_distance`)
-Queries averaging position 4–20 with sufficient impressions and strong page
-relevance. Recommendations: improve page, add missing manifest section,
-strengthen internal links, add evidence.
+### 2. Ranking within reach (`striking_distance`) — implemented (V1)
+Queries averaging position **4–20** with **≥ 50 impressions** in the
+window. Constants: `packages/scoring/src/detectors.ts`
+(`STRIKING_DISTANCE`). Where a position 4–10 query also has a CTR gap,
+`ctr_gap` wins and `striking_distance` is suppressed for that query.
+Recommendations: improve page, add missing manifest section, strengthen
+internal links, add evidence.
+
+V1 analysis runs per site over the trailing 28 days of
+`gsc_daily_query_page`; each run regenerates `status='open'` V1
+opportunities (accepted/dismissed rows are never touched).
 
 ### 3. New-page opportunity (`unowned_cluster`)
 A query cluster qualifies only when ALL hold: meaningful combined demand;

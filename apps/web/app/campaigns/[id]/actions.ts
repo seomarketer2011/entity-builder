@@ -46,6 +46,18 @@ export async function addSite(formData: FormData): Promise<void> {
   redirect(`/campaigns/${campaignId}?notice=${encodeURIComponent(`Site "${name}" added — now link its property below`)}`);
 }
 
+export async function deleteSite(formData: FormData): Promise<void> {
+  const campaignId = String(formData.get("campaignId") ?? "");
+  const siteId = String(formData.get("siteId") ?? "");
+  if (!campaignId || !siteId) return;
+  const supabase = await createClient();
+  const { error } = await supabase.from("sites").delete().eq("id", siteId);
+  if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
+  redirect(
+    `/campaigns/${campaignId}?notice=${encodeURIComponent("Site deleted, along with its imported data")}`,
+  );
+}
+
 export async function linkPropertyToSite(formData: FormData): Promise<void> {
   const propertyId = String(formData.get("propertyId") ?? "");
   const campaignId = String(formData.get("campaignId") ?? "");
