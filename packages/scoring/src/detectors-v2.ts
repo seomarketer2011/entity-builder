@@ -100,7 +100,16 @@ export function detectCannibalisation(rows: QueryPageTotals[]): FindingV2[] {
     list.push(row);
     byQuery.set(row.query, list);
   }
-  const findings: FindingV2[] = [];
+
+  // Per-query contender detection, then grouped by the SET of competing
+  // pages: one finding per page conflict, not one per query variant.
+  interface Conflict {
+    pages: string[];
+    queries: Array<{ query: string; impressions: number; contenders: QueryPageTotals[] }>;
+    totalImpressions: number;
+  }
+  const conflicts = new Map<string, Conflict>();
+
   for (const [query, pages] of byQuery) {
     const total = pages.reduce((s, p) => s + p.impressions, 0);
     if (total < CANNIBALISATION.minQueryImpressions) continue;
@@ -108,22 +117,48 @@ export function detectCannibalisation(rows: QueryPageTotals[]): FindingV2[] {
       .filter((p) => p.impressions / total >= CANNIBALISATION.minShare)
       .sort((a, b) => b.impressions - a.impressions);
     if (contenders.length < 2) continue;
+    const key = contenders
+      .map((c) => c.page)
+      .sort()
+      .join(" | ");
+    const conflict = conflicts.get(key) ?? {
+      pages: contenders.map((c) => c.page).sort(),
+      queries: [],
+      totalImpressions: 0,
+    };
+    conflict.queries.push({ query, impressions: total, contenders });
+    conflict.totalImpressions += total;
+    conflicts.set(key, conflict);
+  }
+
+  const findings: FindingV2[] = [];
+  for (const conflict of conflicts.values()) {
+    conflict.queries.sort((a, b) => b.impressions - a.impressions);
+    const sample = conflict.queries.slice(0, 4).map((q) => `"${q.query}"`).join(", ");
+    const queryCount = conflict.queries.length;
     findings.push({
       type: "cannibalisation",
-      subject: query,
-      title: `Cannibalisation: ${contenders.length} pages compete for "${query}"`,
+      subject: conflict.pages.join(" | "),
+      title:
+        `Cannibalisation: ${conflict.pages.length} pages compete over ` +
+        `${queryCount} quer${queryCount === 1 ? "y" : "ies"} (${sample})`,
       explanation:
-        `"${query}" (${total} impressions) is served by ${contenders.length} different pages ` +
-        `each taking ≥25% of impressions: ` +
-        contenders.map((c) => `${c.page} (pos ${c.position?.toFixed(1) ?? "?"})`).join(", ") +
-        `. Google is unsure which page to rank, which usually caps both below their potential.`,
+        `These pages split the same search demand (${conflict.totalImpressions} impressions ` +
+        `across ${queryCount} quer${queryCount === 1 ? "y" : "ies"}): ` +
+        conflict.pages.join(" vs ") +
+        `. Google is unsure which page to rank, which usually caps all of them below their ` +
+        `potential. Top queries affected: ${sample}.`,
       recommendedAction:
         "Decide which page owns this intent. Either consolidate the weaker page into the " +
         "stronger one (redirect), differentiate their intents clearly (and retitle), or fix " +
         "internal anchor text so links for this topic all point at the owner.",
-      evidence: { query, totalImpressions: total, contenders },
+      evidence: {
+        pages: conflict.pages,
+        totalImpressions: conflict.totalImpressions,
+        queries: conflict.queries,
+      },
       priority: scoreOpportunity({
-        trafficPotential: pot(total),
+        trafficPotential: pot(conflict.totalImpressions),
         confidence: 85,
         commercialValue: 70,
         pageRelevance: 85,

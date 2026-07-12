@@ -59,6 +59,30 @@ describe("detectCannibalisation — table-driven", () => {
     expect(findings[0]!.title).toContain("2 pages compete");
   });
 
+  it("groups query variants over the same page pair into ONE finding", () => {
+    const findings = detectCannibalisation([
+      qp("emergency locksmith nottingham", "/a", 60),
+      qp("emergency locksmith nottingham", "/b", 40),
+      qp("emergency locksmiths nottingham", "/a", 30),
+      qp("emergency locksmiths nottingham", "/b", 25),
+      qp("24 hour locksmith nottingham", "/a", 35),
+      qp("24 hour locksmith nottingham", "/b", 30),
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.title).toContain("3 queries");
+    expect(findings[0]!.explanation).toContain("220 impressions");
+  });
+
+  it("different page sets stay separate findings", () => {
+    const findings = detectCannibalisation([
+      qp("locksmith croydon", "/a", 60),
+      qp("locksmith croydon", "/b", 40),
+      qp("cctv croydon", "/c", 60),
+      qp("cctv croydon", "/d", 40),
+    ]);
+    expect(findings).toHaveLength(2);
+  });
+
   it("dominant page with a tiny second page does not fire", () => {
     const findings = detectCannibalisation([
       qp("locksmith croydon", "/a", 90),
@@ -82,6 +106,17 @@ describe("detectCannibalisation — table-driven", () => {
       qp("upvc door lock", "/c", 30),
     ]);
     expect(findings[0]!.title).toContain("3 pages");
+  });
+
+  it("priority reflects combined demand across grouped queries", () => {
+    const grouped = detectCannibalisation([
+      qp("q1", "/a", 300),
+      qp("q1", "/b", 200),
+      qp("q2", "/a", 300),
+      qp("q2", "/b", 200),
+    ])[0]!;
+    const single = detectCannibalisation([qp("q1", "/a", 300), qp("q1", "/b", 200)])[0]!;
+    expect(grouped.priority.overall).toBeGreaterThan(single.priority.overall);
   });
 });
 

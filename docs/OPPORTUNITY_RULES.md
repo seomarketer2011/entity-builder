@@ -59,7 +59,9 @@ this cluster").
 - `declining_page`: previous 28-day window ≥ 20 clicks AND current window
   below 70% of previous.
 - `cannibalisation`: query with ≥ 50 impressions where ≥ 2 pages each take
-  ≥ 25% of impressions.
+  ≥ 25% of impressions. Findings are grouped by the set of competing pages
+  — one finding per page conflict, listing every affected query variant,
+  with priority driven by the conflict's combined impressions.
 - `unowned_cluster`: lexical cluster (token Jaccard ≥ 0.5) with ≥ 2 member
   queries, ≥ 150 combined impressions, and best member position > 25 (or
   unranked). Branded queries excluded. Output is advisory: a new page must
