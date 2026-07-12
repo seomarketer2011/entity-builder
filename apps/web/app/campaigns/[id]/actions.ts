@@ -7,6 +7,7 @@ import {
   INCREMENTAL_REPULL_DAYS,
   addDays,
 } from "@entity-builder/gsc";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -70,9 +71,8 @@ export async function linkPropertyToSite(formData: FormData): Promise<void> {
     .update({ site_id: siteId || null })
     .eq("id", propertyId);
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  redirect(
-    `/campaigns/${campaignId}?notice=${encodeURIComponent(siteId ? "Property linked — you can now queue a sync" : "Property unlinked")}`,
-  );
+  // No redirect: re-render in place so the page keeps its scroll position.
+  revalidatePath(`/campaigns/${campaignId}`);
 }
 
 export async function queueSyncJob(formData: FormData): Promise<void> {
@@ -100,7 +100,7 @@ export async function queueSyncJob(formData: FormData): Promise<void> {
     date_to: dateTo,
   });
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  redirect(
-    `/campaigns/${campaignId}?notice=${encodeURIComponent(`${kind} job queued — the worker will pick it up shortly`)}`,
-  );
+  // No redirect: the new job appears in the Sync jobs table below without
+  // losing scroll position.
+  revalidatePath(`/campaigns/${campaignId}`);
 }

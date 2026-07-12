@@ -115,7 +115,7 @@ export default async function CampaignPage({
         </form>
       </div>
 
-      <h2>Google Search Console</h2>
+      <h2 id="gsc">Google Search Console</h2>
       <div className="card">
         <p>
           <a
@@ -128,7 +128,7 @@ export default async function CampaignPage({
             Read-only Search Console access; refresh tokens are encrypted at rest.
           </span>
         </p>
-        <form className="inline" method="get">
+        <form className="inline" method="get" action={`/campaigns/${id}#gsc`}>
           <input
             name="q"
             placeholder="Filter properties (e.g. jdselectricians)"
