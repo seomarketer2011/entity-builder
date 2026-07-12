@@ -158,7 +158,7 @@ export default async function CampaignPage({
               {(properties ?? [])
                 .filter((p) => !q || p.property_uri.toLowerCase().includes(q.toLowerCase()))
                 .map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} id={`prop-${p.id}`}>
                   <td>{p.property_uri}</td>
                   <td>{p.permission_level ?? "—"}</td>
                   <td>

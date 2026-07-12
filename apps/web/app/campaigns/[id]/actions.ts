@@ -7,7 +7,6 @@ import {
   INCREMENTAL_REPULL_DAYS,
   addDays,
 } from "@entity-builder/gsc";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -71,8 +70,9 @@ export async function linkPropertyToSite(formData: FormData): Promise<void> {
     .update({ site_id: siteId || null })
     .eq("id", propertyId);
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  // No redirect: re-render in place so the page keeps its scroll position.
-  revalidatePath(`/campaigns/${campaignId}`);
+  // Redirect (guaranteed fresh render on the Workers runtime) anchored to
+  // the row just acted on, so scroll lands back where the user was.
+  redirect(`/campaigns/${campaignId}#prop-${propertyId}`);
 }
 
 export async function queueSyncJob(formData: FormData): Promise<void> {
@@ -100,7 +100,6 @@ export async function queueSyncJob(formData: FormData): Promise<void> {
     date_to: dateTo,
   });
   if (error) redirect(`/campaigns/${campaignId}?error=${encodeURIComponent(error.message)}`);
-  // No redirect: the new job appears in the Sync jobs table below without
-  // losing scroll position.
-  revalidatePath(`/campaigns/${campaignId}`);
+  // Anchor back to the property row that was queued.
+  redirect(`/campaigns/${campaignId}#prop-${propertyId}`);
 }

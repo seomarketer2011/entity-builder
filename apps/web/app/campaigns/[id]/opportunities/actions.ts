@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -56,7 +55,7 @@ export async function reviewOpportunity(formData: FormData): Promise<void> {
     reviewer_id: user?.id ?? null,
     decision,
   });
-  // No redirect: the card drops out of the open feed in place, keeping
-  // scroll position while working down the list.
-  revalidatePath(`/campaigns/${campaignId}/opportunities`);
+  // Redirect for a guaranteed fresh render on the Workers runtime; the
+  // feed is priority-ordered so the next card to action is at the top.
+  redirect(`/campaigns/${campaignId}/opportunities`);
 }
