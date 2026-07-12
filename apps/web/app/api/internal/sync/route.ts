@@ -55,7 +55,9 @@ export async function POST(request: Request) {
   // progress heartbeat for 5+ minutes goes back to 'queued'. Progress is
   // persisted after every window, so at most one window repeats (idempotent
   // upserts make the repeat harmless).
-  const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
+  // Successful windows heartbeat every ~10-20s, so 2 minutes of silence
+  // reliably means the invocation was killed.
+  const staleBefore = new Date(Date.now() - 2 * 60_000).toISOString();
   await db
     .from("gsc_sync_jobs")
     .update({ status: "queued" })
