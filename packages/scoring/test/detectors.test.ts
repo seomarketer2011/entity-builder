@@ -103,6 +103,24 @@ describe("detectCtrGap — table-driven", () => {
   });
 });
 
+describe("isBrandedQuery via runDetectors", () => {
+  const cases: Array<{ query: string; domain: string; branded: boolean }> = [
+    { query: "lockhubnottinghamlocksmiths.co.uk", domain: "lockhubnottinghamlocksmiths.co.uk", branded: true },
+    { query: "lockhub nottingham locksmiths", domain: "lockhubnottinghamlocksmiths.co.uk", branded: true },
+    { query: "www.cr9locksmithcroydon.co.uk", domain: "cr9locksmithcroydon.co.uk", branded: true },
+    { query: "locksmith croydon", domain: "cr9locksmithcroydon.co.uk", branded: false },
+    { query: "door repairs croydon", domain: "cr9locksmithcroydon.co.uk", branded: false },
+  ];
+  for (const c of cases) {
+    it(`"${c.query}" vs ${c.domain} → ${c.branded ? "filtered" : "kept"}`, () => {
+      const findings = runDetectors([row({ query: c.query, position: 10, impressions: 500 })], {
+        siteDomain: c.domain,
+      });
+      expect(findings.length).toBe(c.branded ? 0 : 1);
+    });
+  }
+});
+
 describe("runDetectors", () => {
   it("a position 4-10 query with a CTR gap fires ctr_gap, not both", () => {
     const findings = runDetectors([row({ position: 5, impressions: 300, ctr: 0.001 })]);

@@ -22,7 +22,10 @@ import { NextResponse } from "next/server";
  * key — this route is the only trusted-context data path in the app.
  */
 
-const BATCH = 500;
+// Larger batches keep big months inside the per-invocation subrequest cap
+// (each upsert call is one subrequest; CR9's 15k-row months hit the limit
+// at 500).
+const BATCH = 2000;
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

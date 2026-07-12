@@ -144,12 +144,40 @@ export function detectCtrGap(rows: QueryTotals[]): DetectorFinding[] {
     });
 }
 
-export function runDetectors(rows: QueryTotals[]): DetectorFinding[] {
+/**
+ * Branded/navigational queries (people searching the site's own name) are
+ * not content opportunities. Matches on the domain's core token, ignoring
+ * separators and TLD: "lockhub-nottingham.co.uk" filters
+ * "lockhub nottingham", "lockhubnottingham.co.uk", etc.
+ */
+export function isBrandedQuery(query: string, siteDomain: string): boolean {
+  const core = siteDomain
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .split(".")[0]!
+    .replace(/[^a-z0-9]/g, "");
+  if (core.length < 4) return false;
+  const normalisedQuery = query.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return normalisedQuery.includes(core);
+}
+
+export interface DetectorOptions {
+  /** Site domain for branded-query exclusion, e.g. "cr9locksmithcroydon.co.uk". */
+  siteDomain?: string;
+}
+
+export function runDetectors(
+  rows: QueryTotals[],
+  options: DetectorOptions = {},
+): DetectorFinding[] {
+  const input = options.siteDomain
+    ? rows.filter((r) => !isBrandedQuery(r.query, options.siteDomain!))
+    : rows;
   // A query in striking distance can't also have a top-10 CTR gap, so the
   // two sets are disjoint by construction (position ranges do not overlap
   // except positions 4–10, where CTR-gap wins if both fire).
-  const ctrGaps = detectCtrGap(rows);
+  const ctrGaps = detectCtrGap(input);
   const flagged = new Set(ctrGaps.map((f) => f.query));
-  const striking = detectStrikingDistance(rows).filter((f) => !flagged.has(f.query));
+  const striking = detectStrikingDistance(input).filter((f) => !flagged.has(f.query));
   return [...ctrGaps, ...striking].sort((a, b) => b.priority.overall - a.priority.overall);
 }

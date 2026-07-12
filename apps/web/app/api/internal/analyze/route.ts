@@ -27,6 +27,7 @@ interface SiteRef {
   organisation_id: string;
   campaign_id: string;
   name: string;
+  domain: string;
 }
 
 async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
@@ -42,7 +43,7 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
   });
   if (error) throw new Error(`aggregation failed for ${site.name}: ${error.message}`);
 
-  const findings = runDetectors((totals ?? []) as QueryTotals[]);
+  const findings = runDetectors((totals ?? []) as QueryTotals[], { siteDomain: site.domain });
 
   // Regenerate open V1 opportunities for this site.
   await db
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
     siteFilter = { campaign_id: campaignId };
   }
 
-  let query = db.from("sites").select("id, organisation_id, campaign_id, name");
+  let query = db.from("sites").select("id, organisation_id, campaign_id, name, domain");
   if (siteFilter.campaign_id) query = query.eq("campaign_id", siteFilter.campaign_id);
   const { data: sites } = await query;
 
