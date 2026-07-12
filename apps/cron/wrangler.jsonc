@@ -7,7 +7,10 @@
   "triggers": {
     "crons": ["*/2 * * * *"]
   },
+  // Same-account workers.dev fetches are blocked (error 1042); call the
+  // web worker through a service binding instead.
+  "services": [{ "binding": "WEB", "service": "entity-builder-web" }],
   "vars": {
-    "SYNC_ENDPOINT": "https://entity-builder-web.seomarketer2011.workers.dev/api/internal/sync"
+    "SYNC_ENDPOINT": "https://entity-builder-web/api/internal/sync"
   }
 }
