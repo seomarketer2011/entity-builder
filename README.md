@@ -1,5 +1,9 @@
 # Entity Builder — SEO Opportunity Engine
 
+> **Picking this up? Start with [`docs/OPERATIONS.md`](docs/OPERATIONS.md)** —
+> the master operations & handoff note (live URLs, accounts, automation,
+> current status, outstanding items, gotchas).
+
 A platform for building **topical authority the honest way**: instead of asking
 "which words must this page contain?", it models **which entities and
 relationships each page must explain, what evidence proves them, and why the

@@ -1,5 +1,10 @@
 # SEO Opportunity Engine (entity-builder)
 
+> **New here? Read `docs/OPERATIONS.md` first.** It is the master
+> handoff/operations note: live URLs, accounts, how the system runs itself,
+> what's deployed, outstanding items, and known gotchas. Everything an
+> operator or a fresh session needs to continue without guessing.
+
 ## Mission
 
 Build a multi-tenant platform that imports Google Search Console and website
