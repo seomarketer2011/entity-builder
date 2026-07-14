@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>Weight Tracker</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#273449; --line:#334155;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --good:#34d399;
+    --bad:#f87171; --warn:#fbbf24; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.45;
+    padding:env(safe-area-inset-top) 0 40px;
+  }
+  header{padding:22px 18px 6px;text-align:center}
+  header h1{margin:0;font-size:22px;letter-spacing:.3px}
+  header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  main{max-width:720px;margin:0 auto;padding:12px 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:12px 0}
+  .card h2{margin:0 0 12px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input{
+    width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:11px 12px;font-size:16px;outline:none
+  }
+  input:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+  button{
+    width:100%;margin-top:14px;background:var(--accent);color:#04202b;border:0;border-radius:10px;
+    padding:12px;font-size:16px;font-weight:700;cursor:pointer
+  }
+  button.secondary{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+  .conv{font-size:13px;color:var(--muted);margin-top:6px;min-height:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .stat .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:3px}
+  .stat .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .big{grid-column:1 / -1;text-align:center}
+  .big .v{font-size:30px}
+  .pos{color:var(--good)} .neg{color:var(--bad)} .warnc{color:var(--warn)}
+  .pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;margin-top:6px}
+  .pill.good{background:rgba(52,211,153,.15);color:var(--good)}
+  .pill.bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .pill.warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  canvas{width:100%;height:220px;display:block}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .act{display:flex;gap:8px;justify-content:flex-end}
+  .act button{width:auto;margin:0;padding:5px 10px;font-size:12px;font-weight:600}
+  .empty{color:var(--muted);text-align:center;padding:22px 0}
+  .err{color:var(--bad);font-size:13px;margin-top:8px;min-height:16px}
+  /* Passcode gate */
+  #gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  #gate .box{max-width:340px;width:100%;text-align:center}
+  #gate h1{font-size:24px;margin:0 0 4px}
+  #gate p{color:var(--muted);margin:0 0 18px;font-size:14px}
+  .hidden{display:none!important}
+  .footnote{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <h1>🔒 Weight Tracker</h1>
+    <p>Enter your passcode to continue.</p>
+    <input id="pass" type="password" inputmode="numeric" placeholder="Passcode" autocomplete="current-password" />
+    <button id="passBtn">Unlock</button>
+    <div class="err" id="passErr"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>⚖️ Weight Tracker</h1>
+    <p>kg · lbs · stones — track your goal</p>
+  </header>
+
+  <main>
+    <!-- SUMMARY -->
+    <section class="card" id="summaryCard">
+      <h2>Where you are</h2>
+      <div class="grid" id="summary">
+        <div class="empty" style="grid-column:1/-1">Add your first weigh-in below to see your stats.</div>
+      </div>
+    </section>
+
+    <!-- CHART -->
+    <section class="card hidden" id="chartCard">
+      <h2>Progress</h2>
+      <canvas id="chart" width="700" height="220"></canvas>
+    </section>
+
+    <!-- ADD WEIGH-IN -->
+    <section class="card">
+      <h2>Add a weigh-in</h2>
+      <div class="row">
+        <div>
+          <label for="d">Date</label>
+          <input id="d" type="date" />
+        </div>
+        <div>
+          <label for="w">Weight (kg)</label>
+          <input id="w" type="number" step="0.1" min="1" inputmode="decimal" placeholder="e.g. 82.5" />
+        </div>
+      </div>
+      <div class="conv" id="wConv"></div>
+      <label for="n">Note (optional)</label>
+      <input id="n" type="text" maxlength="500" placeholder="e.g. after morning walk" />
+      <button id="addBtn">Save weigh-in</button>
+      <div class="err" id="addErr"></div>
+    </section>
+
+    <!-- GOAL SETTINGS -->
+    <section class="card">
+      <h2>Your goal</h2>
+      <div class="row">
+        <div>
+          <label for="sd">Start date</label>
+          <input id="sd" type="date" />
+        </div>
+        <div>
+          <label for="sw">Start weight (kg)</label>
+          <input id="sw" type="number" step="0.1" min="1" inputmode="decimal" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="gw">Goal weight (kg)</label>
+          <input id="gw" type="number" step="0.1" min="1" inputmode="decimal" />
+        </div>
+        <div>
+          <label for="gd">Target date</label>
+          <input id="gd" type="date" />
+        </div>
+      </div>
+      <label for="ht">Height (cm) — optional, for BMI</label>
+      <input id="ht" type="number" step="0.1" min="1" inputmode="decimal" placeholder="e.g. 175" />
+      <button id="saveGoal">Save goal</button>
+      <div class="err" id="goalErr"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="card">
+      <h2>History</h2>
+      <div id="history"><div class="empty">No weigh-ins yet.</div></div>
+    </section>
+
+    <div class="footnote">Weights stored in kg. 1 stone = 14 lb · 1 kg ≈ 2.2046 lb</div>
+  </main>
+</div>
+
+<script>
+const LB_PER_KG = 2.2046226218;
+let PASS = localStorage.getItem("wt_pass") || "";
+let entries = [];
+let settings = {};
+
+/* ---------- conversions ---------- */
+function kgToLb(kg){ return kg * LB_PER_KG; }
+function fmtKg(kg){ return kg.toFixed(1) + " kg"; }
+function fmtLb(kg){ return kgToLb(kg).toFixed(1) + " lb"; }
+function fmtStone(kg){
+  const totalLb = kgToLb(kg);
+  const st = Math.floor(totalLb / 14);
+  const lb = totalLb - st * 14;
+  return st + " st " + lb.toFixed(1) + " lb";
+}
+function allUnits(kg){ return fmtKg(kg) + "  ·  " + fmtLb(kg) + "  ·  " + fmtStone(kg); }
+function signed(n, unit){ return (n > 0 ? "+" : "") + n.toFixed(1) + " " + unit; }
+function daysBetween(a, b){ return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(iso){
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
+}
+
+/* ---------- api ---------- */
+async function api(path, opts={}){
+  const res = await fetch("/api/" + path, {
+    ...opts,
+    headers: { "content-type":"application/json", "x-passcode": PASS, ...(opts.headers||{}) },
+  });
+  if (res.status === 401){ lock(); throw new Error("unauthorised"); }
+  if (!res.ok){
+    let msg = "Request failed";
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+/* ---------- passcode gate ---------- */
+function lock(){
+  localStorage.removeItem("wt_pass"); PASS = "";
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("gate").classList.remove("hidden");
+}
+async function unlock(){
+  const v = document.getElementById("pass").value.trim();
+  const errEl = document.getElementById("passErr");
+  errEl.textContent = "";
+  if (!v){ errEl.textContent = "Enter your passcode."; return; }
+  PASS = v;
+  try {
+    await api("login", { method:"POST" });
+    localStorage.setItem("wt_pass", v);
+    document.getElementById("gate").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    await loadAll();
+  } catch (e){
+    PASS = "";
+    errEl.textContent = e.message === "unauthorised" ? "Wrong passcode." : e.message;
+  }
+}
+
+/* ---------- load + render ---------- */
+async function loadAll(){
+  [entries, settings] = await Promise.all([ api("entries"), api("settings") ]);
+  renderSummary(); renderHistory(); drawChart();
+}
+
+function latest(){ return entries.length ? entries[entries.length-1] : null; }
+function first(){ return entries.length ? entries[0] : null; }
+
+function renderSummary(){
+  const el = document.getElementById("summary");
+  const cur = latest();
+  if (!cur){
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1">Add your first weigh-in below to see your stats.</div>';
+    document.getElementById("chartCard").classList.add("hidden");
+    return;
+  }
+
+  // Baseline: explicit start weight if set, else first logged entry.
+  const startW = settings.start_weight_kg ?? (first() ? first().weight_kg : cur.weight_kg);
+  const startD = settings.start_date ?? (first() ? first().date : cur.date);
+  const changeKg = cur.weight_kg - startW;
+  const changeLb = kgToLb(cur.weight_kg) - kgToLb(startW);
+  const lostClass = changeKg < 0 ? "pos" : (changeKg > 0 ? "neg" : "");
+
+  let cards = "";
+
+  // Current weight (all units)
+  cards += `<div class="stat big"><div class="k">Current weight</div>
+    <div class="v">${fmtKg(cur.weight_kg)}</div>
+    <div class="s">${fmtLb(cur.weight_kg)} &nbsp;·&nbsp; ${fmtStone(cur.weight_kg)}</div>
+    <div class="s">as of ${fmtDate(cur.date)}</div></div>`;
+
+  // Change since start
+  cards += `<div class="stat"><div class="k">Since start</div>
+    <div class="v ${lostClass}">${signed(changeKg,"kg")}</div>
+    <div class="s">${signed(changeLb,"lb")} · from ${fmtDate(startD)}</div></div>`;
+
+  // Goal block
+  if (settings.goal_weight_kg){
+    const goalW = settings.goal_weight_kg;
+    const remainKg = cur.weight_kg - goalW;      // >0 still to lose (if goal below current)
+    const losing = goalW < startW;               // is this a weight-loss goal?
+    const totalToLose = startW - goalW;          // signed target span
+    const doneSoFar = startW - cur.weight_kg;
+    const pct = totalToLose !== 0 ? Math.max(0, Math.min(100, (doneSoFar/totalToLose)*100)) : 0;
+    const reached = losing ? cur.weight_kg <= goalW : cur.weight_kg >= goalW;
+
+    cards += `<div class="stat"><div class="k">Goal weight</div>
+      <div class="v">${fmtKg(goalW)}</div>
+      <div class="s">${fmtStone(goalW)}</div></div>`;
+
+    cards += `<div class="stat"><div class="k">${reached ? "Goal" : "Still to go"}</div>
+      <div class="v ${reached ? "pos" : ""}">${reached ? "🎉 reached" : signed(remainKg,"kg")}</div>
+      <div class="s">${reached ? "well done!" : Math.round(pct)+"% of the way"}</div></div>`;
+
+    // On-track status vs target date
+    cards += `<div class="stat big">${goalStatus(startW, startD, cur, goalW, losing, reached)}</div>`;
+  } else {
+    cards += `<div class="stat big"><div class="k">Goal</div>
+      <div class="s" style="margin-top:8px">Set a goal weight &amp; target date below to see your status.</div></div>`;
+  }
+
+  // BMI (optional)
+  if (settings.height_cm){
+    const h = settings.height_cm/100;
+    const bmi = cur.weight_kg / (h*h);
+    const band = bmi < 18.5 ? "underweight" : bmi < 25 ? "healthy" : bmi < 30 ? "overweight" : "obese";
+    cards += `<div class="stat"><div class="k">BMI</div>
+      <div class="v">${bmi.toFixed(1)}</div><div class="s">${band}</div></div>`;
+  }
+
+  // 7-day trend
+  const trend = weeklyTrend();
+  if (trend){
+    cards += `<div class="stat"><div class="k">Last 7 days</div>
+      <div class="v ${trend.kg<0?"pos":(trend.kg>0?"neg":"")}">${signed(trend.kg,"kg")}</div>
+      <div class="s">${signed(trend.lb,"lb")} / week</div></div>`;
+  }
+
+  el.innerHTML = cards;
+  document.getElementById("chartCard").classList.remove("hidden");
+}
+
+function goalStatus(startW, startD, cur, goalW, losing, reached){
+  const head = `<div class="k">Goal status</div>`;
+  if (reached){
+    return head + `<div class="pill good">🎉 Goal reached!</div>`;
+  }
+  if (!settings.goal_date){
+    return head + `<div class="s" style="margin-top:8px">Add a target date to see if you're on track.</div>`;
+  }
+
+  const totalDays = daysBetween(startD, settings.goal_date);
+  const elapsed = daysBetween(startD, cur.date);
+  const targetSpan = goalW - startW;               // negative for loss
+  let statusHtml = "";
+
+  if (totalDays > 0 && elapsed >= 0){
+    const expectedNow = startW + targetSpan * Math.min(1, elapsed/totalDays);
+    const ahead = losing ? cur.weight_kg <= expectedNow : cur.weight_kg >= expectedNow;
+    const diff = Math.abs(cur.weight_kg - expectedNow);
+    if (ahead){
+      statusHtml += `<div class="pill good">✅ On track / ahead</div>
+        <div class="s">${diff.toFixed(1)} kg ahead of pace · target ${fmtDate(settings.goal_date)}</div>`;
+    } else {
+      statusHtml += `<div class="pill warn">⏳ Behind pace</div>
+        <div class="s">${diff.toFixed(1)} kg behind · target ${fmtDate(settings.goal_date)}</div>`;
+    }
+  } else {
+    statusHtml += `<div class="s" style="margin-top:6px">Target date: ${fmtDate(settings.goal_date)}</div>`;
+  }
+
+  // Projection at current rate
+  const proj = projection(startW, startD, cur, goalW);
+  if (proj) statusHtml += `<div class="s">${proj}</div>`;
+  return head + statusHtml;
+}
+
+function projection(startW, startD, cur, goalW){
+  const days = daysBetween(startD, cur.date);
+  if (days <= 0) return null;
+  const ratePerDay = (cur.weight_kg - startW) / days;   // kg/day (negative = losing)
+  const need = goalW - cur.weight_kg;                    // kg still needed (negative if goal below)
+  if (ratePerDay === 0) return "At your current rate you're holding steady.";
+  // Moving toward the goal?
+  if ((need < 0 && ratePerDay < 0) || (need > 0 && ratePerDay > 0)){
+    const daysLeft = Math.ceil(need / ratePerDay);
+    const d = new Date(cur.date + "T00:00:00");
+    d.setDate(d.getDate() + daysLeft);
+    return `At this pace you'll hit goal ~${d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}.`;
+  }
+  return "At your current pace you're moving away from the goal.";
+}
+
+function weeklyTrend(){
+  if (entries.length < 2) return null;
+  const cur = latest();
+  const cutoff = new Date(cur.date + "T00:00:00"); cutoff.setDate(cutoff.getDate()-7);
+  // nearest entry ~7 days ago (first entry on/before cutoff, else earliest)
+  let ref = entries[0];
+  for (const e of entries){ if (new Date(e.date) <= cutoff) ref = e; }
+  const kg = cur.weight_kg - ref.weight_kg;
+  return { kg, lb: kgToLb(cur.weight_kg) - kgToLb(ref.weight_kg) };
+}
+
+/* ---------- history ---------- */
+function renderHistory(){
+  const el = document.getElementById("history");
+  if (!entries.length){ el.innerHTML = '<div class="empty">No weigh-ins yet.</div>'; return; }
+  let rows = `<table><thead><tr><th>Date</th><th class="num">kg</th><th class="num">st / lb</th><th></th></tr></thead><tbody>`;
+  for (let i = entries.length-1; i >= 0; i--){
+    const e = entries[i];
+    const prev = i>0 ? entries[i-1] : null;
+    const delta = prev ? e.weight_kg - prev.weight_kg : 0;
+    const dClass = delta<0?"pos":(delta>0?"neg":"");
+    rows += `<tr>
+      <td>${fmtDate(e.date)}${e.note?`<div style="color:var(--muted);font-size:12px">${escapeHtml(e.note)}</div>`:""}</td>
+      <td class="num">${e.weight_kg.toFixed(1)}${prev?` <span class="${dClass}" style="font-size:12px">${signed(delta,"")}</span>`:""}</td>
+      <td class="num">${fmtStone(e.weight_kg)}</td>
+      <td><div class="act">
+        <button class="secondary" onclick="editEntry(${e.id})">Edit</button>
+        <button class="secondary" onclick="delEntry(${e.id})">✕</button>
+      </div></td>
+    </tr>`;
+  }
+  rows += `</tbody></table>`;
+  el.innerHTML = rows;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function delEntry(id){
+  if (!confirm("Delete this weigh-in?")) return;
+  await api("entries/"+id, { method:"DELETE" });
+  await loadAll();
+}
+async function editEntry(id){
+  const e = entries.find(x=>x.id===id); if (!e) return;
+  const nw = prompt("New weight in kg:", e.weight_kg);
+  if (nw === null) return;
+  const weight = Number(nw);
+  if (!Number.isFinite(weight) || weight<=0){ alert("Invalid weight."); return; }
+  const nd = prompt("Date (YYYY-MM-DD):", e.date) || e.date;
+  await api("entries/"+id, { method:"PUT", body: JSON.stringify({ date:nd, weight_kg:weight, note:e.note }) });
+  await loadAll();
+}
+
+/* ---------- chart (canvas) ---------- */
+function drawChart(){
+  const c = document.getElementById("chart");
+  if (!entries.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = c.clientWidth || 700, cssH = 220;
+  c.width = cssW*dpr; c.height = cssH*dpr;
+  const ctx = c.getContext("2d"); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,cssW,cssH);
+
+  const pad = {l:44,r:14,t:14,b:26};
+  const W = cssW-pad.l-pad.r, H = cssH-pad.t-pad.b;
+
+  const xs = entries.map(e=>new Date(e.date).getTime());
+  const ys = entries.map(e=>e.weight_kg);
+  const goal = settings.goal_weight_kg;
+  let minY = Math.min(...ys, goal||Infinity), maxY = Math.max(...ys, goal||-Infinity);
+  if (minY===maxY){ minY-=1; maxY+=1; }
+  const padY=(maxY-minY)*0.12; minY-=padY; maxY+=padY;
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const X=t=> pad.l + (maxX===minX?W/2:(t-minX)/(maxX-minX)*W);
+  const Y=v=> pad.t + (1-(v-minY)/(maxY-minY))*H;
+
+  // gridlines + y labels
+  ctx.strokeStyle="#334155"; ctx.fillStyle="#94a3b8"; ctx.font="11px sans-serif"; ctx.lineWidth=1;
+  for (let i=0;i<=3;i++){
+    const v=minY+(maxY-minY)*i/3, y=Y(v);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(cssW-pad.r,y); ctx.globalAlpha=.4; ctx.stroke(); ctx.globalAlpha=1;
+    ctx.fillText(v.toFixed(1), 6, y+3);
+  }
+  // goal line
+  if (goal){
+    ctx.strokeStyle="#34d399"; ctx.setLineDash([5,4]); ctx.beginPath();
+    ctx.moveTo(pad.l,Y(goal)); ctx.lineTo(cssW-pad.r,Y(goal)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle="#34d399"; ctx.fillText("goal", cssW-pad.r-26, Y(goal)-4);
+  }
+  // weight line
+  ctx.strokeStyle="#38bdf8"; ctx.lineWidth=2; ctx.beginPath();
+  entries.forEach((e,i)=>{ const x=X(xs[i]), y=Y(ys[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.stroke();
+  // points
+  ctx.fillStyle="#38bdf8";
+  entries.forEach((e,i)=>{ ctx.beginPath(); ctx.arc(X(xs[i]),Y(ys[i]),3,0,7); ctx.fill(); });
+  // x labels (first & last)
+  ctx.fillStyle="#94a3b8";
+  ctx.fillText(fmtShort(entries[0].date), pad.l, cssH-8);
+  const lbl=fmtShort(entries[entries.length-1].date);
+  ctx.fillText(lbl, cssW-pad.r-ctx.measureText(lbl).width, cssH-8);
+}
+function fmtShort(iso){ return new Date(iso+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}); }
+
+/* ---------- form handlers ---------- */
+document.getElementById("w").addEventListener("input", e=>{
+  const kg = Number(e.target.value);
+  document.getElementById("wConv").textContent =
+    (Number.isFinite(kg) && kg>0) ? "= " + fmtLb(kg) + "  ·  " + fmtStone(kg) : "";
+});
+
+document.getElementById("addBtn").addEventListener("click", async ()=>{
+  const errEl=document.getElementById("addErr"); errEl.textContent="";
+  const date=document.getElementById("d").value;
+  const weight=Number(document.getElementById("w").value);
+  const note=document.getElementById("n").value.trim();
+  if (!date){ errEl.textContent="Pick a date."; return; }
+  if (!Number.isFinite(weight)||weight<=0){ errEl.textContent="Enter a weight in kg."; return; }
+  try{
+    await api("entries", { method:"POST", body: JSON.stringify({ date, weight_kg:weight, note }) });
+    document.getElementById("w").value=""; document.getElementById("n").value="";
+    document.getElementById("wConv").textContent="";
+    await loadAll();
+  }catch(err){ errEl.textContent=err.message; }
+});
+
+document.getElementById("saveGoal").addEventListener("click", async ()=>{
+  const errEl=document.getElementById("goalErr"); errEl.textContent="";
+  const payload={
+    start_date:val("sd"), start_weight_kg:val("sw"),
+    goal_weight_kg:val("gw"), goal_date:val("gd"), height_cm:val("ht"),
+  };
+  try{
+    await api("settings", { method:"PUT", body: JSON.stringify(payload) });
+    await loadAll();
+    errEl.style.color="var(--good)"; errEl.textContent="Saved ✓";
+    setTimeout(()=>{errEl.textContent="";errEl.style.color="";},1500);
+  }catch(err){ errEl.textContent=err.message; }
+});
+function val(id){ const v=document.getElementById(id).value; return v===""?null:v; }
+
+function fillGoalForm(){
+  if (settings.start_date) document.getElementById("sd").value=settings.start_date;
+  if (settings.start_weight_kg!=null) document.getElementById("sw").value=settings.start_weight_kg;
+  if (settings.goal_weight_kg!=null) document.getElementById("gw").value=settings.goal_weight_kg;
+  if (settings.goal_date) document.getElementById("gd").value=settings.goal_date;
+  if (settings.height_cm!=null) document.getElementById("ht").value=settings.height_cm;
+}
+
+/* wrap loadAll so the goal form is populated too */
+const _loadAll = loadAll;
+loadAll = async function(){ await _loadAll(); fillGoalForm(); };
+
+/* ---------- init ---------- */
+document.getElementById("d").value = todayISO();
+document.getElementById("passBtn").addEventListener("click", unlock);
+document.getElementById("pass").addEventListener("keydown", e=>{ if(e.key==="Enter") unlock(); });
+window.addEventListener("resize", ()=>{ if(entries.length) drawChart(); });
+
+(async function(){
+  if (PASS){
+    try{ await api("login",{method:"POST"});
+      document.getElementById("gate").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
+      await loadAll();
+    }catch{ lock(); }
+  }
+})();
+</script>
+</body>
+</html>

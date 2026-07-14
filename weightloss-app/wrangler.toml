@@ -1,0 +1,9 @@
+name = "my-weightloss"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+# D1 database binding — available in Functions as env.DB
+[[d1_databases]]
+binding = "DB"
+database_name = "weightloss-db"
+database_id = "973dd676-e20d-46bf-acd1-c86f471ede10"
