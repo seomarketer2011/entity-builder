@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070f" />
+<title>Dealer Dash</title>
+<style>
+  :root{ --neon:#39ff14; --wall:#1836d8; --wallEdge:#4f7bff; --bg:#05070f; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(circle at 50% 0%,#0d1330,#05070f 70%);
+    color:#e8ecff;font-family:"Trebuchet MS",Verdana,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom));min-height:100%;
+    user-select:none;-webkit-user-select:none;overflow-x:hidden;
+  }
+  h1{
+    margin:4px 0 2px;font-size:26px;letter-spacing:2px;color:var(--neon);
+    text-shadow:0 0 8px rgba(57,255,20,.7),0 0 20px rgba(57,255,20,.35);
+    font-weight:900;
+  }
+  .sub{margin:0 0 8px;color:#8fa0d8;font-size:12px;letter-spacing:.5px;text-align:center}
+  #hud{
+    width:100%;max-width:430px;display:flex;justify-content:space-between;
+    font-size:14px;letter-spacing:1px;margin-bottom:6px;text-shadow:0 0 6px rgba(79,123,255,.6)
+  }
+  #hud b{color:#ffd23f}
+  .lives{color:#ff5b7f;letter-spacing:2px}
+  .wrap{position:relative;line-height:0}
+  canvas{
+    border:2px solid #24347a;border-radius:12px;background:#05070f;
+    box-shadow:0 0 24px rgba(24,54,216,.45),inset 0 0 30px rgba(0,0,0,.6);
+    max-width:94vw;height:auto;touch-action:none;
+  }
+  #overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(5,7,15,.82);border-radius:12px;text-align:center;padding:20px;gap:10px;
+  }
+  #overlay.hidden{display:none}
+  #overlay h2{margin:0;font-size:30px;color:var(--neon);text-shadow:0 0 12px rgba(57,255,20,.6)}
+  #overlay p{margin:0;color:#b9c4ee;font-size:14px;max-width:300px}
+  #overlay .big{font-size:22px;color:#ffd23f}
+  button.play{
+    margin-top:6px;background:var(--neon);color:#05231a;border:0;border-radius:10px;
+    padding:12px 26px;font-size:17px;font-weight:900;letter-spacing:1px;cursor:pointer;
+    box-shadow:0 0 18px rgba(57,255,20,.5)
+  }
+  .flash{
+    position:absolute;left:50%;top:34%;transform:translateX(-50%);
+    color:#ffd23f;font-weight:900;font-size:20px;text-shadow:0 0 10px rgba(0,0,0,.9);
+    pointer-events:none;opacity:0;transition:opacity .15s
+  }
+  #dpad{
+    margin-top:12px;display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,58px);
+    gap:6px;touch-action:none;
+  }
+  #dpad button{
+    background:#141c44;border:1px solid #2c3c86;border-radius:12px;color:#cdd7ff;font-size:24px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer
+  }
+  #dpad button:active{background:#22308a}
+  #dpad .u{grid-area:1/2} #dpad .l{grid-area:2/1} #dpad .r{grid-area:2/3} #dpad .d{grid-area:3/2}
+  .legend{max-width:430px;color:#8fa0d8;font-size:12px;margin-top:12px;text-align:center;line-height:1.6}
+  .legend span{white-space:nowrap;margin:0 6px}
+  @media (hover:hover) and (pointer:fine){ #dpad{display:none} }
+</style>
+</head>
+<body>
+  <h1>DEALER DASH</h1>
+  <p class="sub">Grab all the cash 💵 · dodge the dealers 🕴️ · grab a badge 🛡️ to bust 'em</p>
+
+  <div id="hud">
+    <div>SCORE <b id="score">0</b></div>
+    <div>HI <b id="hi">0</b></div>
+    <div>LVL <b id="level">1</b></div>
+    <div class="lives" id="lives">❤❤❤</div>
+  </div>
+
+  <div class="wrap">
+    <canvas id="game"></canvas>
+    <div class="flash" id="flash"></div>
+    <div id="overlay">
+      <h2 id="ovTitle">DEALER DASH</h2>
+      <p id="ovText">Eat all the cash without getting caught. Arrow keys / WASD on desktop, swipe or use the pad on mobile.</p>
+      <button class="play" id="playBtn">START</button>
+    </div>
+  </div>
+
+  <div id="dpad">
+    <button class="u" data-dir="up">▲</button>
+    <button class="l" data-dir="left">◀</button>
+    <button class="r" data-dir="right">▶</button>
+    <button class="d" data-dir="down">▼</button>
+  </div>
+
+  <div class="legend">
+    <span>🤑 you</span><span>💵 cash +10</span><span>🛡️ badge — bust dealers</span><span>🕴️ dealer</span><span>😱 panicking (bust for +200↑)</span>
+  </div>
+
+<script>
+(() => {
+  // ---------- config ----------
+  const cols = 9, rows = 10;               // maze cell counts
+  const W = cols*2+1, H = rows*2+1;        // tile grid: 19 x 21
+  const TILE = 22;
+  const TUNNEL_ROW = 11;                   // horizontal wrap corridor
+  const DEN = {x:9, y:11};
+  const DIRS = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
+  const OPP = {up:'down', down:'up', left:'right', right:'left'};
+  const ORDER = ['up','left','down','right'];
+  const FRIGHT_SPEED = 4.2, RETURN_SPEED = 13;
+  const PHASES = [['scatter',7],['chase',20],['scatter',7],['chase',20],['scatter',5],['chase',1e9]];
+
+  const ROLES = [
+    {id:'chaser',   color:'#ff3b30', corner:{x:W-2,y:1}},
+    {id:'ambusher', color:'#ff6fd8', corner:{x:1,y:1}},
+    {id:'flanker',  color:'#38e1ff', corner:{x:W-2,y:H-2}},
+    {id:'wanderer', color:'#ff9f1a', corner:{x:1,y:H-2}},
+  ];
+
+  // ---------- state ----------
+  let grid, pellets, power, pelletCount;
+  let player, enemies;
+  let score=0, lives=3, level=1, hi=+(localStorage.getItem('dd_hi')||0);
+  let mode='title';                        // title|ready|play|dead|win|over
+  let readyTimer=0, winTimer=0;
+  let phaseIndex=0, phaseTimer=0, phase='scatter';
+  let frightTimer=0, bustChain=0;
+  let last=0;
+
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.width = W*TILE*dpr; cv.height = H*TILE*dpr;
+  cv.style.width = Math.min(W*TILE, window.innerWidth*0.94)+'px';
+  ctx.scale(dpr,dpr);
+
+  const $ = id => document.getElementById(id);
+
+  // ---------- maze generation (guaranteed connected) ----------
+  const inDen = (x,y) => x>=DEN.x-1 && x<=DEN.x+1 && y>=DEN.y-1 && y<=DEN.y+1;
+
+  function genMaze(){
+    grid = Array.from({length:H},()=>Array(W).fill(0));
+    const seen = Array.from({length:rows},()=>Array(cols).fill(false));
+    const cellTile = (cx,cy)=>[cx*2+1, cy*2+1];
+    seen[0][0]=true;
+    let [sx,sy]=cellTile(0,0); grid[sy][sx]=1;
+    const stack=[[0,0]];
+    while(stack.length){
+      const [cx,cy]=stack[stack.length-1];
+      const nbrs=[];
+      for(const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){
+        const nx=cx+dx, ny=cy+dy;
+        if(nx>=0&&nx<cols&&ny>=0&&ny<rows&&!seen[ny][nx]) nbrs.push([nx,ny,dx,dy]);
+      }
+      if(nbrs.length){
+        const [nx,ny,dx,dy]=nbrs[(Math.random()*nbrs.length)|0];
+        seen[ny][nx]=true;
+        grid[cy*2+1+dy][cx*2+1+dx]=1;      // knock down wall between cells
+        const [tx,ty]=cellTile(nx,ny); grid[ty][tx]=1;
+        stack.push([nx,ny]);
+      } else stack.pop();
+    }
+    // add loops (opening a wall only ever merges regions -> stays connected)
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+      if(grid[y][x]) continue;
+      const horiz = grid[y][x-1]&&grid[y][x+1]&&!grid[y-1][x]&&!grid[y+1][x];
+      const vert  = grid[y-1][x]&&grid[y+1][x]&&!grid[y][x-1]&&!grid[y][x+1];
+      if((horiz||vert) && Math.random()<0.16) grid[y][x]=1;
+    }
+    // tunnel corridor + den
+    for(let x=0;x<W;x++) grid[TUNNEL_ROW][x]=1;
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++) grid[DEN.y+dy][DEN.x+dx]=1;
+
+    // pellets
+    pellets = Array.from({length:H},()=>Array(W).fill(0));
+    power = new Set();
+    pelletCount = 0;
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(!grid[y][x] || inDen(x,y)) continue;
+      pellets[y][x]=1; pelletCount++;
+    }
+    for(const [px,py] of [[1,1],[W-2,1],[1,H-2],[W-2,H-2]]){
+      if(!pellets[py][px]){ pellets[py][px]=1; pelletCount++; }
+      power.add(px+','+py);
+    }
+  }
+
+  // ---------- geometry helpers ----------
+  function neighbor(x,y,dir){
+    const d=DIRS[dir]; let nx=x+d.x, ny=y+d.y;
+    if(ny===TUNNEL_ROW){ if(nx<0) nx=W-1; else if(nx>=W) nx=0; }
+    if(nx<0||nx>=W||ny<0||ny>=H) return null;
+    return {x:nx,y:ny};
+  }
+  const passable = (x,y)=> y>=0&&y<H&&x>=0&&x<W&&grid[y][x]===1;
+  const lerp = (a,b,t)=> a+(b-a)*t;
+  const fpos = e => ({x:lerp(e.cx,e.tx,e.t), y:lerp(e.cy,e.ty,e.t)});
+
+  function applyTarget(e, dir, nb){
+    if(Math.abs(nb.x-e.cx)>1){ e.cx = dir==='left' ? nb.x+1 : nb.x-1; } // wrap: keep lerp local
+    e.tx=nb.x; e.ty=nb.y;
+  }
+
+  // ---------- decisions ----------
+  function playerDecide(){
+    const e=player;
+    let d=null;
+    let nb=neighbor(e.cx,e.cy,e.nextDir);
+    if(e.nextDir && nb && passable(nb.x,nb.y)) d=e.nextDir;
+    else { const cn=neighbor(e.cx,e.cy,e.dir); if(e.dir && cn && passable(cn.x,cn.y)) d=e.dir; }
+    if(!d){ e.stopped=true; e.tx=e.cx; e.ty=e.cy; return; }
+    e.stopped=false; e.dir=d;
+    applyTarget(e, d, neighbor(e.cx,e.cy,d));
+  }
+  function playerReverseCheck(){
+    const e=player;
+    if(e.stopped || !e.nextDir || e.nextDir!==OPP[e.dir]) return;
+    const nb=neighbor(e.cx,e.cy,e.nextDir);
+    if(nb && passable(nb.x,nb.y)){
+      e.dir=e.nextDir;
+      [e.cx,e.tx]=[e.tx,e.cx]; [e.cy,e.ty]=[e.ty,e.cy];
+      e.t=1-e.t;
+    }
+  }
+  function enemyTarget(e){
+    const p=player, pd=DIRS[p.dir]||{x:0,y:0};
+    if(e.role==='chaser')   return {x:p.cx, y:p.cy};
+    if(e.role==='ambusher') return {x:p.cx+pd.x*4, y:p.cy+pd.y*4};
+    if(e.role==='flanker'){
+      const ax=p.cx+pd.x*2, ay=p.cy+pd.y*2, red=enemies[0];
+      return {x:ax*2-red.cx, y:ay*2-red.cy};
+    }
+    const dist=Math.hypot(e.cx-p.cx, e.cy-p.cy);
+    return dist>8 ? {x:p.cx,y:p.cy} : e.corner;
+  }
+  function enemyDecide(e){
+    if(e.forceReverse){
+      e.forceReverse=false;
+      const rd=OPP[e.dir], nb=neighbor(e.cx,e.cy,rd);
+      if(nb && passable(nb.x,nb.y)){ e.dir=rd; applyTarget(e,rd,nb); return; }
+    }
+    const cands=[];
+    for(const d of ORDER){
+      if(d===OPP[e.dir]) continue;
+      const nb=neighbor(e.cx,e.cy,d);
+      if(nb && passable(nb.x,nb.y)) cands.push({d,nb});
+    }
+    let choice;
+    if(!cands.length){ const d=OPP[e.dir]; choice={d, nb:neighbor(e.cx,e.cy,d)}; }
+    else if(e.frightened && !e.returning){ choice=cands[(Math.random()*cands.length)|0]; }
+    else {
+      const target = e.returning ? DEN : (phase==='scatter' ? e.corner : enemyTarget(e));
+      let best=Infinity;
+      for(const c of cands){
+        const dx=c.nb.x-target.x, dy=c.nb.y-target.y, dist=dx*dx+dy*dy;
+        if(dist<best){ best=dist; choice=c; }
+      }
+    }
+    e.dir=choice.d; applyTarget(e, choice.d, choice.nb);
+  }
+
+  // ---------- speeds ----------
+  const playerSpeed = ()=> Math.min(6.8 + (level-1)*0.15, 8.8);
+  const enemySpeed  = ()=> Math.min(6.0 + (level-1)*0.28, 8.4);
+
+  // ---------- eating & events ----------
+  function eatAt(x,y){
+    if(!pellets[y][x]) return;
+    pellets[y][x]=0; pelletCount--;
+    if(power.has(x+','+y)){ score+=50; startFright(); }
+    else { score+=10; }
+    if(score>hi){ hi=score; }
+    updateHUD();
+  }
+  function startFright(){
+    frightTimer = Math.max(2.5, 7 - (level-1)*0.4);
+    bustChain=0;
+    for(const e of enemies) if(!e.returning){ e.frightened=true; e.forceReverse=true; }
+  }
+  function flash(msg){
+    const f=$('flash'); f.textContent=msg; f.style.opacity=1;
+    clearTimeout(f._t); f._t=setTimeout(()=>f.style.opacity=0, 700);
+  }
+  function checkCollisions(){
+    const pf=fpos(player);
+    for(const e of enemies){
+      const ef=fpos(e);
+      if(Math.hypot(pf.x-ef.x, pf.y-ef.y) < 0.6){
+        if(e.frightened && !e.returning){
+          const val=200*Math.pow(2,bustChain); bustChain++; score+=val;
+          if(score>hi) hi=score;
+          e.returning=true; e.frightened=false;
+          flash('BUSTED! +'+val); updateHUD();
+        } else if(!e.returning){
+          loseLife(); return;
+        }
+      }
+    }
+  }
+  function loseLife(){
+    lives--; updateHUD();
+    if(lives<=0){ mode='over'; saveHi(); showOverlay('GAME OVER','You got caught. Final score '+score+'.','PLAY AGAIN'); }
+    else { mode='ready'; readyTimer=1.6; resetActors(); }
+  }
+  function checkWin(){
+    if(pelletCount<=0){ mode='win'; winTimer=2.2; saveHi(); flash('LEVEL '+level+' CLEARED!'); }
+  }
+  const saveHi = ()=>{ if(hi> +(localStorage.getItem('dd_hi')||0)) localStorage.setItem('dd_hi',hi); };
+
+  // ---------- reset / start ----------
+  function resetActors(){
+    // player bottom-centre
+    player = {cx:9, cy:19, tx:9, ty:19, t:0, dir:'left', nextDir:'left', stopped:false, role:'player'};
+    // pick an open starting direction
+    for(const d of ['left','right','up','down']){
+      const nb=neighbor(9,19,d); if(nb&&passable(nb.x,nb.y)){ player.dir=d; player.nextDir=d; break; }
+    }
+    eatAt(player.cx, player.cy);
+    const spawns=[{x:9,y:11},{x:8,y:11},{x:10,y:11},{x:9,y:10}];
+    enemies = ROLES.map((r,i)=>({
+      cx:spawns[i].x, cy:spawns[i].y, tx:spawns[i].x, ty:spawns[i].y, t:1,
+      dir:'up', role:r.id, color:r.color, corner:r.corner,
+      frightened:false, returning:false, forceReverse:false,
+    }));
+    phaseIndex=0; phase='scatter'; phaseTimer=PHASES[0][1]; frightTimer=0; bustChain=0;
+  }
+  function startGame(){
+    score=0; lives=3; level=1;
+    genMaze(); resetActors();
+    mode='ready'; readyTimer=1.6;
+    hideOverlay(); updateHUD();
+  }
+  function nextLevel(){
+    level++; genMaze(); resetActors();
+    mode='ready'; readyTimer=1.6; updateHUD();
+  }
+
+  // ---------- update ----------
+  function update(dt){
+    if(mode==='ready'){ readyTimer-=dt; if(readyTimer<=0) mode='play'; return; }
+    if(mode==='win'){ winTimer-=dt; if(winTimer<=0) nextLevel(); return; }
+    if(mode!=='play') return;
+
+    phaseTimer-=dt;
+    if(phaseTimer<=0 && phaseIndex<PHASES.length-1){
+      phaseIndex++; phase=PHASES[phaseIndex][0]; phaseTimer=PHASES[phaseIndex][1];
+      for(const e of enemies) if(!e.frightened && !e.returning) e.forceReverse=true;
+    }
+    if(frightTimer>0){ frightTimer-=dt; if(frightTimer<=0){ for(const e of enemies) e.frightened=false; bustChain=0; } }
+
+    // player
+    playerReverseCheck();
+    if(player.stopped) playerDecide();
+    if(!player.stopped){
+      player.t += playerSpeed()*dt;
+      let guard=0;
+      while(player.t>=1 && guard++<4){
+        player.t-=1; player.cx=player.tx; player.cy=player.ty;
+        eatAt(player.cx, player.cy);
+        playerDecide();
+        if(player.stopped){ player.t=0; break; }
+      }
+    }
+    // enemies
+    for(const e of enemies){
+      const sp = e.returning ? RETURN_SPEED : (e.frightened ? FRIGHT_SPEED : enemySpeed());
+      e.t += sp*dt;
+      let guard=0;
+      while(e.t>=1 && guard++<6){
+        e.t-=1; e.cx=e.tx; e.cy=e.ty;
+        if(e.returning && e.cx===DEN.x && e.cy===DEN.y){ e.returning=false; e.frightened=false; }
+        enemyDecide(e);
+      }
+    }
+    checkCollisions();
+    if(mode==='play') checkWin();
+  }
+
+  // ---------- render ----------
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+  function drawEmoji(ch,fx,fy,size){
+    ctx.font = size+'px "Segoe UI Emoji","Apple Color Emoji",serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(ch, fx*TILE+TILE/2, fy*TILE+TILE/2+1);
+  }
+  function render(){
+    ctx.clearRect(0,0,W*TILE,H*TILE);
+    // walls
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(grid[y][x]) continue;
+      if(y===TUNNEL_ROW && (x===0||x===W-1)) continue; // open tunnel mouths
+      ctx.fillStyle='#0b1642';
+      ctx.strokeStyle='var(--wallEdge)'; ctx.strokeStyle='#3a5cff';
+      roundRect(x*TILE+2, y*TILE+2, TILE-4, TILE-4, 5);
+      ctx.fill(); ctx.lineWidth=1.5; ctx.stroke();
+    }
+    // pellets
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      if(!pellets[y][x]) continue;
+      const cx=x*TILE+TILE/2, cy=y*TILE+TILE/2;
+      if(power.has(x+','+y)){
+        const pulse = 0.6+0.4*Math.sin(performance.now()/180);
+        ctx.globalAlpha=pulse; drawEmoji('🛡️', x, y, TILE*0.8); ctx.globalAlpha=1;
+      } else {
+        ctx.fillStyle='#8bff5a';
+        ctx.shadowColor='#8bff5a'; ctx.shadowBlur=5;
+        ctx.beginPath(); ctx.arc(cx,cy,2.1,0,7); ctx.fill();
+        ctx.shadowBlur=0;
+      }
+    }
+    // enemies
+    for(const e of enemies){
+      const f=fpos(e);
+      if(e.returning){ drawEmoji('👀', f.x, f.y, TILE*0.85); continue; }
+      const blink = e.frightened && frightTimer<2 && (Math.floor(performance.now()/200)%2===0);
+      ctx.beginPath();
+      ctx.fillStyle = e.frightened ? (blink?'#e8ecff':'#2b4bff') : e.color;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur=8;
+      ctx.arc(f.x*TILE+TILE/2, f.y*TILE+TILE/2, TILE*0.44, 0, 7); ctx.fill();
+      ctx.shadowBlur=0;
+      drawEmoji(e.frightened?'😱':'🕴️', f.x, f.y, TILE*0.7);
+    }
+    // player
+    const pf=fpos(player);
+    drawEmoji('🤑', pf.x, pf.y, TILE*0.92);
+
+    // ready / countdown text
+    if(mode==='ready'){
+      ctx.fillStyle='#ffd23f'; ctx.font='bold 22px Trebuchet MS';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('READY!', W*TILE/2, H*TILE*0.62);
+    }
+  }
+
+  // ---------- HUD / overlay ----------
+  function updateHUD(){
+    $('score').textContent=score; $('hi').textContent=hi;
+    $('level').textContent=level; $('lives').textContent='❤'.repeat(Math.max(0,lives))||'—';
+  }
+  function showOverlay(title,text,btn){
+    $('ovTitle').textContent=title; $('ovText').textContent=text;
+    $('playBtn').textContent=btn||'START';
+    $('overlay').classList.remove('hidden');
+  }
+  const hideOverlay = ()=> $('overlay').classList.add('hidden');
+
+  // ---------- loop ----------
+  function loop(ts){
+    const dt=Math.min((ts-last)/1000, 0.05); last=ts;
+    if(mode!=='title') update(dt);
+    if(grid) render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- input ----------
+  const KEYS={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right',W:'up',S:'down',A:'left',D:'right'};
+  window.addEventListener('keydown',ev=>{
+    const dir=KEYS[ev.key];
+    if(dir){ ev.preventDefault(); if(player) player.nextDir=dir; }
+    if((ev.key===' '||ev.key==='Enter') && (mode==='title'||mode==='over')) startGame();
+  },{passive:false});
+
+  document.querySelectorAll('#dpad button').forEach(b=>{
+    const set=e=>{ e.preventDefault(); if(player) player.nextDir=b.dataset.dir; };
+    b.addEventListener('touchstart',set,{passive:false});
+    b.addEventListener('mousedown',set);
+  });
+
+  let tsx=0,tsy=0;
+  cv.addEventListener('touchstart',e=>{ const t=e.touches[0]; tsx=t.clientX; tsy=t.clientY; },{passive:true});
+  cv.addEventListener('touchend',e=>{
+    const t=e.changedTouches[0], dx=t.clientX-tsx, dy=t.clientY-tsy;
+    if(Math.abs(dx)<18 && Math.abs(dy)<18) return;
+    if(player) player.nextDir = Math.abs(dx)>Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up');
+  },{passive:true});
+
+  $('playBtn').addEventListener('click', startGame);
+
+  // ---------- boot ----------
+  updateHUD();
+  showOverlay('DEALER DASH','Eat all the cash 💵 without getting caught by the dealers 🕴️. Grab a badge 🛡️ to turn the tables and bust them. Arrows / WASD, or swipe / tap the pad on mobile.','START');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
