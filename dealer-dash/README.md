@@ -8,16 +8,30 @@ police badge to bust them.
 - Single self-contained `public/index.html` — no backend, no build, no CDN deps.
 - Deployed as a static Cloudflare Pages project.
 
-## How to play
+## Story & how to play
+
+You play **Donny the Dealer**. He's holding; the addicts want to buy.
 
 - **Desktop:** Arrow keys or WASD. Space/Enter to start or restart.
 - **Mobile:** Swipe on the board, or use the on-screen D-pad.
-- Eat every 💵 (cash) to clear the level.
-- 🕴️ dealers chase you — four of them, each with different behaviour
-  (direct chaser, ambusher, flanker, and a wanderer that backs off when far).
-- Grab a 🛡️ **badge** and dealers panic (😱) — bust them for escalating
-  points (200 → 400 → 800 → 1600). Busted dealers (👀) run back to their den.
+- Collect the stash dots to clear the level — each one tops up your **STASH** bar
+  and earns £10.
+- Four **addicts** 🕴️ chase you, each with different behaviour (direct chaser,
+  ambusher, flanker, and a wanderer that backs off when far). One of them wears
+  a real photo sprite.
+- When an addict catches you, you make a **£100 sale** and they wander off happy
+  (😌) — *but only if you're holding*. Each sale drains your stash bar.
+- Get caught with an **empty stash** and they mob you — you lose a life.
+- Grab a **line** (the pulsing white icon) to send every addict into a **frenzy**
+  (😱); you can shove through them for £75 each while it lasts.
+- The maze is **braided** — no dead-ends, so you can never be blocked into a corner.
 - 3 lives. Each level regenerates a fresh maze and speeds up.
+
+## Custom faces
+
+Enemy/player sprites can be real circular PNGs dropped into `public/` (e.g.
+`lady.png`) and referenced via the `sprite` field on a role, or drawn as
+cartoon avatars in canvas (see `drawDonny`).
 
 ## Design notes
 

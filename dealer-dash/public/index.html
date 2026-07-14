@@ -28,8 +28,12 @@
   }
   #hud b{color:#ffd23f}
   .lives{color:#ff5b7f;letter-spacing:2px}
-  .wrap{position:relative;line-height:0}
+  #stashbar{width:100%;max-width:430px;text-align:center;font-size:13px;letter-spacing:2px;
+    color:#8fa0d8;margin:-2px 0 8px}
+  #stashbar b{letter-spacing:3px;font-size:15px;color:#8bff5a}
+  .wrap{position:relative}
   canvas{
+    display:block;
     border:2px solid #24347a;border-radius:12px;background:#05070f;
     box-shadow:0 0 24px rgba(24,54,216,.45),inset 0 0 30px rgba(0,0,0,.6);
     max-width:94vw;height:auto;touch-action:none;
@@ -69,14 +73,15 @@
 </head>
 <body>
   <h1>DEALER DASH</h1>
-  <p class="sub">Grab all the cash 💵 · dodge the dealers 🕴️ · grab a badge 🛡️ to bust 'em</p>
+  <p class="sub">You're <b style="color:#8bff5a">Donny the Dealer</b> 🧒 · collect your stash · when the addicts 🕴️ catch you, you <b style="color:#ffd23f">sell</b> — but only if you're holding. Empty stash = you get mobbed. Grab a <b style="color:#fff">line</b> to send them into a frenzy.</p>
 
   <div id="hud">
-    <div>SCORE <b id="score">0</b></div>
+    <div>CASH £<b id="score">0</b></div>
     <div>HI <b id="hi">0</b></div>
     <div>LVL <b id="level">1</b></div>
     <div class="lives" id="lives">❤❤❤</div>
   </div>
+  <div id="stashbar">STASH <b id="stash">▰▰▰▱▱▱</b></div>
 
   <div class="wrap">
     <canvas id="game"></canvas>
@@ -96,7 +101,7 @@
   </div>
 
   <div class="legend">
-    <span>🤑 you</span><span>💵 cash +10</span><span>🛡️ badge — bust dealers</span><span>🕴️ dealer</span><span>😱 panicking (bust for +200↑)</span>
+    <span>🧒 Donny (you)</span><span>🟢 stash +£10</span><span>⚪ the line — frenzy</span><span>🕴️ addict (catch = £100 sale)</span><span>😱 frenzied</span>
   </div>
 
 <script>
@@ -113,12 +118,22 @@
   const FRIGHT_SPEED = 4.2, RETURN_SPEED = 13;
   const PHASES = [['scatter',7],['chase',20],['scatter',7],['chase',20],['scatter',5],['chase',1e9]];
 
+  // Donny's cartoon look (buzzcut, light skin, colourful athletic tee)
+  const DONNY = {
+    skin:'#f2caa2', hair:'#9c8460', brow:'#6f5c3f', mouth:'#9c4b3b',
+    shirt:['#2fa3a3','#6cc04a','#f4d33f','#3f7fd6','#2fa3a3'],
+  };
+
   const ROLES = [
     {id:'chaser',   color:'#ff3b30', corner:{x:W-2,y:1}},
-    {id:'ambusher', color:'#ff6fd8', corner:{x:1,y:1}},
+    {id:'ambusher', color:'#ff6fd8', corner:{x:1,y:1}, sprite:'lady'},
     {id:'flanker',  color:'#38e1ff', corner:{x:W-2,y:H-2}},
     {id:'wanderer', color:'#ff9f1a', corner:{x:1,y:H-2}},
   ];
+
+  // preloaded photo sprites (circular PNGs in public/)
+  const IMG = {};
+  ['lady'].forEach(k=>{ const i=new Image(); i.src=k+'.png'; IMG[k]=i; });
 
   // ---------- state ----------
   let grid, pellets, power, pelletCount;
@@ -127,7 +142,9 @@
   let mode='title';                        // title|ready|play|dead|win|over
   let readyTimer=0, winTimer=0;
   let phaseIndex=0, phaseTimer=0, phase='scatter';
-  let frightTimer=0, bustChain=0;
+  let frightTimer=0;
+  const STASH_MAX=6, START_STASH=3;
+  let stash=START_STASH;
   let last=0;
 
   const cv = document.getElementById('game');
@@ -170,6 +187,26 @@
       const horiz = grid[y][x-1]&&grid[y][x+1]&&!grid[y-1][x]&&!grid[y+1][x];
       const vert  = grid[y-1][x]&&grid[y+1][x]&&!grid[y][x-1]&&!grid[y][x+1];
       if((horiz||vert) && Math.random()<0.16) grid[y][x]=1;
+    }
+    // braid: give every cell >=2 exits so there are NO dead-ends -> you can
+    // never be blocked into a corner.
+    for(let cy=0;cy<rows;cy++) for(let cx=0;cx<cols;cx++){
+      const x=cx*2+1, y=cy*2+1;
+      let guard=0;
+      while(guard++<4){
+        let ex=0;
+        if(grid[y-1][x])ex++; if(grid[y+1][x])ex++; if(grid[y][x-1])ex++; if(grid[y][x+1])ex++;
+        if(ex>=2) break;
+        const opts=[];
+        for(const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){
+          const wx=x+dx, wy=y+dy, bx=x+dx*2, by=y+dy*2;
+          if(bx<1||bx>=W-1||by<1||by>=H-1) continue;   // beyond-cell must be in bounds
+          if(!grid[wy][wx]) opts.push([wx,wy]);         // a closed wall we can open
+        }
+        if(!opts.length) break;
+        const [wx,wy]=opts[(Math.random()*opts.length)|0];
+        grid[wy][wx]=1;
+      }
     }
     // tunnel corridor + den
     for(let x=0;x<W;x++) grid[TUNNEL_ROW][x]=1;
@@ -271,15 +308,16 @@
   function eatAt(x,y){
     if(!pellets[y][x]) return;
     pellets[y][x]=0; pelletCount--;
-    if(power.has(x+','+y)){ score+=50; startFright(); }
-    else { score+=10; }
+    if(power.has(x+','+y)){ score+=50; grabLine(); }        // grabbed a line
+    else { score+=10; stash=Math.min(STASH_MAX, stash+1); } // picked up a baggie -> +stash
     if(score>hi){ hi=score; }
     updateHUD();
   }
-  function startFright(){
+  function grabLine(){
+    // the line sends the addicts into a frenzy — they scatter and flee
     frightTimer = Math.max(2.5, 7 - (level-1)*0.4);
-    bustChain=0;
     for(const e of enemies) if(!e.returning){ e.frightened=true; e.forceReverse=true; }
+    flash('THE LINE! 🥴');
   }
   function flash(msg){
     const f=$('flash'); f.textContent=msg; f.style.opacity=1;
@@ -288,14 +326,21 @@
   function checkCollisions(){
     const pf=fpos(player);
     for(const e of enemies){
+      if(e.returning) continue;
       const ef=fpos(e);
       if(Math.hypot(pf.x-ef.x, pf.y-ef.y) < 0.6){
-        if(e.frightened && !e.returning){
-          const val=200*Math.pow(2,bustChain); bustChain++; score+=val;
-          if(score>hi) hi=score;
-          e.returning=true; e.frightened=false;
-          flash('BUSTED! +'+val); updateHUD();
-        } else if(!e.returning){
+        if(e.frightened){
+          // frenzied on the line — Donny shakes them off
+          e.frightened=false; e.returning=true;
+          score+=75; if(score>hi) hi=score;
+          flash("LOST 'EM! +75"); updateHUD();
+        } else if(stash>0){
+          // caught with product — make a sale, buyer wanders off happy
+          stash--; score+=100; if(score>hi) hi=score;
+          e.returning=true;
+          flash('SOLD! +100'); updateHUD();
+        } else {
+          // caught with nothing to sell — they mob him
           loseLife(); return;
         }
       }
@@ -303,8 +348,8 @@
   }
   function loseLife(){
     lives--; updateHUD();
-    if(lives<=0){ mode='over'; saveHi(); showOverlay('GAME OVER','You got caught. Final score '+score+'.','PLAY AGAIN'); }
-    else { mode='ready'; readyTimer=1.6; resetActors(); }
+    if(lives<=0){ mode='over'; saveHi(); showOverlay('GAME OVER','Mobbed with an empty stash! Final cash £'+score+'.','PLAY AGAIN'); }
+    else { mode='ready'; readyTimer=1.6; flash('MOBBED!'); resetActors(); }
   }
   function checkWin(){
     if(pelletCount<=0){ mode='win'; winTimer=2.2; saveHi(); flash('LEVEL '+level+' CLEARED!'); }
@@ -323,10 +368,11 @@
     const spawns=[{x:9,y:11},{x:8,y:11},{x:10,y:11},{x:9,y:10}];
     enemies = ROLES.map((r,i)=>({
       cx:spawns[i].x, cy:spawns[i].y, tx:spawns[i].x, ty:spawns[i].y, t:1,
-      dir:'up', role:r.id, color:r.color, corner:r.corner,
+      dir:'up', role:r.id, color:r.color, corner:r.corner, sprite:r.sprite,
       frightened:false, returning:false, forceReverse:false,
     }));
-    phaseIndex=0; phase='scatter'; phaseTimer=PHASES[0][1]; frightTimer=0; bustChain=0;
+    phaseIndex=0; phase='scatter'; phaseTimer=PHASES[0][1]; frightTimer=0;
+    stash=START_STASH;
   }
   function startGame(){
     score=0; lives=3; level=1;
@@ -350,7 +396,7 @@
       phaseIndex++; phase=PHASES[phaseIndex][0]; phaseTimer=PHASES[phaseIndex][1];
       for(const e of enemies) if(!e.frightened && !e.returning) e.forceReverse=true;
     }
-    if(frightTimer>0){ frightTimer-=dt; if(frightTimer<=0){ for(const e of enemies) e.frightened=false; bustChain=0; } }
+    if(frightTimer>0){ frightTimer-=dt; if(frightTimer<=0){ for(const e of enemies) e.frightened=false; } }
 
     // player
     playerReverseCheck();
@@ -391,6 +437,80 @@
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(ch, fx*TILE+TILE/2, fy*TILE+TILE/2+1);
   }
+  function drawDonny(fx,fy,dir){
+    const cx=fx*TILE+TILE/2, cy=fy*TILE+TILE/2;
+    const hr=TILE*0.42, hx=cx, hy=cy-TILE*0.10;
+    const d=DIRS[dir]||{x:0,y:0};
+
+    // colourful athletic shirt / shoulders
+    ctx.save();
+    roundRect(cx-TILE*0.52, cy+TILE*0.14, TILE*1.04, TILE*0.62, 5); ctx.clip();
+    const bw=(TILE*1.04)/DONNY.shirt.length;
+    for(let i=0;i<DONNY.shirt.length;i++){
+      ctx.fillStyle=DONNY.shirt[i];
+      ctx.fillRect(cx-TILE*0.52+i*bw, cy+TILE*0.14, bw+1, TILE*0.62);
+    }
+    ctx.restore();
+
+    // ears
+    ctx.fillStyle=DONNY.skin;
+    ctx.beginPath();
+    ctx.arc(hx-hr*0.92, hy+hr*0.1, hr*0.26, 0, 7);
+    ctx.arc(hx+hr*0.92, hy+hr*0.1, hr*0.26, 0, 7);
+    ctx.fill();
+
+    // head
+    ctx.beginPath(); ctx.arc(hx,hy,hr,0,7);
+    ctx.fillStyle=DONNY.skin; ctx.fill();
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(120,80,50,.4)'; ctx.stroke();
+
+    // buzzcut: short hair on top + thin sides
+    ctx.save();
+    ctx.beginPath(); ctx.arc(hx,hy,hr,0,7); ctx.clip();
+    ctx.fillStyle=DONNY.hair;
+    ctx.fillRect(hx-hr, hy-hr, hr*2, hr*0.92);        // top
+    ctx.fillRect(hx-hr, hy-hr, hr*0.34, hr*2);        // left side
+    ctx.fillRect(hx+hr*0.66, hy-hr, hr*0.34, hr*2);   // right side
+    ctx.restore();
+
+    // eyes (glance toward movement)
+    const eyeY=hy+hr*0.14, ex=hr*0.4;
+    ctx.fillStyle='#20140c';
+    ctx.beginPath();
+    ctx.arc(hx-ex+d.x*1.3, eyeY+d.y, 1.5, 0, 7);
+    ctx.arc(hx+ex+d.x*1.3, eyeY+d.y, 1.5, 0, 7);
+    ctx.fill();
+
+    // eyebrows
+    ctx.strokeStyle=DONNY.brow; ctx.lineWidth=1.2; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(hx-ex-2.2, eyeY-3.4); ctx.lineTo(hx-ex+2.2, eyeY-3.8);
+    ctx.moveTo(hx+ex-2.2, eyeY-3.8); ctx.lineTo(hx+ex+2.2, eyeY-3.4);
+    ctx.stroke();
+
+    // cheeky smile
+    ctx.strokeStyle=DONNY.mouth; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(hx, eyeY+hr*0.34, hr*0.36, 0.15*Math.PI, 0.85*Math.PI); ctx.stroke();
+  }
+
+  function drawCoke(tx,ty){
+    const cx=tx*TILE+TILE/2, cy=ty*TILE+TILE/2, s=TILE;
+    ctx.save(); ctx.translate(cx,cy);
+    // glass surface
+    roundRect(-s*0.44,-s*0.32,s*0.88,s*0.64,3);
+    ctx.fillStyle='rgba(150,190,255,0.14)'; ctx.fill();
+    ctx.lineWidth=0.8; ctx.strokeStyle='rgba(160,200,255,0.35)'; ctx.stroke();
+    // the white line
+    ctx.lineCap='round'; ctx.strokeStyle='#ffffff';
+    ctx.shadowColor='#dbeaff'; ctx.shadowBlur=6; ctx.lineWidth=s*0.17;
+    ctx.beginPath(); ctx.moveTo(-s*0.3, s*0.14); ctx.lineTo(s*0.14,-s*0.08); ctx.stroke();
+    ctx.shadowBlur=0;
+    // rolled note
+    ctx.strokeStyle='#7bd08a'; ctx.lineWidth=s*0.1;
+    ctx.beginPath(); ctx.moveTo(s*0.13,-s*0.04); ctx.lineTo(s*0.32,-s*0.2); ctx.stroke();
+    ctx.restore();
+  }
+
   function render(){
     ctx.clearRect(0,0,W*TILE,H*TILE);
     // walls
@@ -407,8 +527,8 @@
       if(!pellets[y][x]) continue;
       const cx=x*TILE+TILE/2, cy=y*TILE+TILE/2;
       if(power.has(x+','+y)){
-        const pulse = 0.6+0.4*Math.sin(performance.now()/180);
-        ctx.globalAlpha=pulse; drawEmoji('🛡️', x, y, TILE*0.8); ctx.globalAlpha=1;
+        const pulse = 0.7+0.3*Math.sin(performance.now()/160);
+        ctx.globalAlpha=pulse; drawCoke(x, y); ctx.globalAlpha=1;
       } else {
         ctx.fillStyle='#8bff5a';
         ctx.shadowColor='#8bff5a'; ctx.shadowBlur=5;
@@ -419,7 +539,18 @@
     // enemies
     for(const e of enemies){
       const f=fpos(e);
-      if(e.returning){ drawEmoji('👀', f.x, f.y, TILE*0.85); continue; }
+      if(e.returning){ drawEmoji('😌', f.x, f.y, TILE*0.85); continue; }
+      if(e.sprite && !e.frightened){
+        const img=IMG[e.sprite];
+        if(img && img.complete && img.naturalWidth){
+          const s=TILE*1.04, cx=f.x*TILE+TILE/2, cy=f.y*TILE+TILE/2;
+          ctx.drawImage(img, cx-s/2, cy-s/2, s, s);
+          ctx.beginPath(); ctx.arc(cx,cy,s/2-0.8,0,7);
+          ctx.lineWidth=1.8; ctx.strokeStyle=e.color;
+          ctx.shadowColor=e.color; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+          continue;
+        }
+      }
       const blink = e.frightened && frightTimer<2 && (Math.floor(performance.now()/200)%2===0);
       ctx.beginPath();
       ctx.fillStyle = e.frightened ? (blink?'#e8ecff':'#2b4bff') : e.color;
@@ -428,9 +559,9 @@
       ctx.shadowBlur=0;
       drawEmoji(e.frightened?'😱':'🕴️', f.x, f.y, TILE*0.7);
     }
-    // player
+    // player (cartoon Donny)
     const pf=fpos(player);
-    drawEmoji('🤑', pf.x, pf.y, TILE*0.92);
+    drawDonny(pf.x, pf.y, player.dir);
 
     // ready / countdown text
     if(mode==='ready'){
@@ -444,6 +575,12 @@
   function updateHUD(){
     $('score').textContent=score; $('hi').textContent=hi;
     $('level').textContent=level; $('lives').textContent='❤'.repeat(Math.max(0,lives))||'—';
+    const s=Math.max(0,Math.min(STASH_MAX,stash));
+    const bar=$('stash');
+    if(bar){
+      bar.textContent='▰'.repeat(s)+'▱'.repeat(STASH_MAX-s);
+      bar.style.color = s===0 ? '#ff5b7f' : (s<=1 ? '#ffd23f' : '#8bff5a');
+    }
   }
   function showOverlay(title,text,btn){
     $('ovTitle').textContent=title; $('ovText').textContent=text;
@@ -486,7 +623,7 @@
 
   // ---------- boot ----------
   updateHUD();
-  showOverlay('DEALER DASH','Eat all the cash 💵 without getting caught by the dealers 🕴️. Grab a badge 🛡️ to turn the tables and bust them. Arrows / WASD, or swipe / tap the pad on mobile.','START');
+  showOverlay('DEALER DASH','Play as Donny the Dealer. Collect your stash and clear the map. When an addict catches you, you make a £100 sale — but each sale drains your stash. Get caught holding nothing and they mob you. Grab a line to send them into a frenzy. Arrows / WASD, or swipe / tap the pad on mobile.','START');
   requestAnimationFrame(loop);
 })();
 </script>
