@@ -279,6 +279,12 @@ function renderSummary(){
       <div class="v ${reached ? "pos" : ""}">${reached ? "🎉 reached" : signed(remainKg,"kg")}</div>
       <div class="s">${reached ? "well done!" : Math.round(pct)+"% of the way"}</div></div>`;
 
+    // Pace needed to hit the goal by the target date
+    if (!reached){
+      const pace = requiredPace(cur, goalW);
+      if (pace) cards += `<div class="stat">${pace}</div>`;
+    }
+
     // On-track status vs target date
     cards += `<div class="stat big">${goalStatus(startW, startD, cur, goalW, losing, reached)}</div>`;
   } else {
@@ -340,6 +346,24 @@ function goalStatus(startW, startD, cur, goalW, losing, reached){
   const proj = projection(startW, startD, cur, goalW);
   if (proj) statusHtml += `<div class="s">${proj}</div>`;
   return head + statusHtml;
+}
+
+function requiredPace(cur, goalW){
+  if (!settings.goal_date) return null;
+  const daysLeft = daysBetween(todayISO(), settings.goal_date);
+  const remainKg = cur.weight_kg - goalW;   // >0 = still to lose, <0 = still to gain
+  const losing = remainKg > 0;
+  if (daysLeft <= 0){
+    return `<div class="k">Pace needed</div><div class="v warnc">—</div>
+      <div class="s">target date has passed</div>`;
+  }
+  const perDayKg = Math.abs(remainKg) / daysLeft;
+  const perWeekKg = perDayKg * 7;
+  const verb = losing ? "lose" : "gain";
+  return `<div class="k">Need to ${verb} / day</div>
+    <div class="v">${perDayKg.toFixed(2)} kg</div>
+    <div class="s">${(perDayKg*LB_PER_KG).toFixed(2)} lb/day · ${perWeekKg.toFixed(2)} kg (${(perWeekKg*LB_PER_KG).toFixed(1)} lb) / week</div>
+    <div class="s">${daysLeft} day${daysLeft===1?"":"s"} left</div>`;
 }
 
 function projection(startW, startD, cur, goalW){
