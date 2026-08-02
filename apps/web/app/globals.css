@@ -170,6 +170,26 @@ th.num {
   overflow-wrap: anywhere;
 }
 
+/* A <summary> defaults to display:list-item, and that is what draws the
+   disclosure triangle. .owner-url sets display:block, which silently
+   removes it — leaving a clickable line with nothing to say it expands.
+   Expandable owner rows therefore keep list-item and get a visible cue. */
+summary.owner-url {
+  display: list-item;
+  list-style-position: inside;
+  cursor: pointer;
+}
+summary.owner-url::marker {
+  color: var(--accent);
+}
+summary.owner-url:hover {
+  color: var(--fg);
+}
+.expand-hint {
+  color: var(--accent);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Competitor badge: only rendered when a query is genuinely contested
    (>= 2 URLs above the 25% contender share), so it stays meaningful. */
 .badge.contested {

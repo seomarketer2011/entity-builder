@@ -107,18 +107,29 @@ export default async function ExplorerPage({
     rows = (data ?? []) as TotalsRow[];
 
     if (dim === "query" && !error) {
-      // Second pass for the per-query URL split. buildObservations is the
-      // same function the cannibalisation detector uses, so the expanded
-      // view and the opportunity feed can never disagree.
-      const pairs = await supabase.rpc("gsc_query_page_totals", {
-        p_site_id: siteId,
-        p_from: from,
-        p_to: to,
-        p_limit: 3000,
-      });
-      if (!pairs.error) {
-        for (const o of buildObservations((pairs.data ?? []) as QueryPageTotals[])) {
-          if (o.contenders.length > 1) splits.set(o.query, o.contenders);
+      // Second pass for the per-query URL split, asked for BY QUERY rather
+      // than from the row-capped gsc_query_page_totals. The badge count
+      // comes from an uncapped aggregate, so a capped split fetch could
+      // badge a row and then have nothing to expand — the exact thing the
+      // badge promises. Bounded by the number of contested rows on screen.
+      const contested = rows
+        .filter((r) => r.query !== undefined && Number(r.contender_count ?? 0) >= 2)
+        .map((r) => r.query as string);
+
+      if (contested.length > 0) {
+        const pairs = await supabase.rpc("gsc_query_page_totals_for_queries", {
+          p_site_id: siteId,
+          p_from: from,
+          p_to: to,
+          p_queries: contested,
+        });
+        if (!pairs.error) {
+          // buildObservations is the same function the cannibalisation
+          // detector uses, so the expanded view and the opportunity feed
+          // can never disagree about who competes for a query.
+          for (const o of buildObservations((pairs.data ?? []) as QueryPageTotals[])) {
+            if (o.contenders.length > 1) splits.set(o.query, o.contenders);
+          }
         }
       }
     }

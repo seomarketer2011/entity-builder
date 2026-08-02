@@ -88,9 +88,13 @@ export function QueryOwnerCell({
       </div>
       {split.length > 1 ? (
         <details>
-          <summary className="owner-url" style={{ cursor: "pointer" }}>
+          <summary className="owner-url">
             {prettyUrl(row.owner_page)} · {fmtShare(row.owner_share)}
             {row.url_count > 1 ? ` of ${row.impressions.toLocaleString()} impressions` : ""}
+            {" "}
+            <span className="expand-hint">
+              — show {split.length} competing URLs
+            </span>
           </summary>
           <table style={{ marginTop: "0.4rem" }}>
             <thead>

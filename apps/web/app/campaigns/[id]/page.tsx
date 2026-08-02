@@ -1,5 +1,10 @@
 import { notFound, redirect } from "next/navigation";
-import { QueryOwnerCell, type QueryOwnerRow } from "@/components/query-owner";
+import { buildObservations, type QueryPageTotals } from "@entity-builder/scoring";
+import {
+  QueryOwnerCell,
+  type ContenderRow,
+  type QueryOwnerRow,
+} from "@/components/query-owner";
 import { requireUser } from "@/lib/supabase/server";
 import { addSite, deleteSite, linkPropertyToSite, queueSyncJob } from "./actions";
 
@@ -59,6 +64,7 @@ export default async function CampaignPage({
   const topSite = campaign.sites.find((s) => s.id === topSiteId);
   let topQueries: QueryOwnerRow[] = [];
   let topQueriesError: string | null = null;
+  const topSplits = new Map<string, ContenderRow[]>();
   if (topSiteId) {
     const today = new Date().toISOString().slice(0, 10);
     const windowFrom = new Date(Date.now() - TOP_QUERY_WINDOW_DAYS * 86400000)
@@ -72,6 +78,26 @@ export default async function CampaignPage({
     });
     if (rpcError) topQueriesError = rpcError.message;
     topQueries = (data ?? []) as QueryOwnerRow[];
+
+    // Splits for the contested rows, so the badge expands here too rather
+    // than only in the Explorer. Asked for by query, so it stays cheap
+    // (at most TOP_QUERY_LIMIT queries) and always matches the badge.
+    const contested = topQueries
+      .filter((r) => Number(r.contender_count ?? 0) >= 2)
+      .map((r) => r.query);
+    if (contested.length > 0) {
+      const pairs = await supabase.rpc("gsc_query_page_totals_for_queries", {
+        p_site_id: topSiteId,
+        p_from: windowFrom,
+        p_to: today,
+        p_queries: contested,
+      });
+      if (!pairs.error) {
+        for (const o of buildObservations((pairs.data ?? []) as QueryPageTotals[])) {
+          if (o.contenders.length > 1) topSplits.set(o.query, o.contenders);
+        }
+      }
+    }
   }
   const contestedCount = topQueries.filter((r) => Number(r.contender_count) >= 2).length;
 
@@ -203,6 +229,7 @@ export default async function CampaignPage({
                         url_count: Number(r.url_count ?? 0),
                         contender_count: Number(r.contender_count ?? 0),
                       }}
+                      contenders={topSplits.get(r.query)}
                       conflictHref={`/campaigns/${id}/conflicts?site=${topSiteId}&q=${encodeURIComponent(r.query)}`}
                     />
                     <td className="num">{Number(r.clicks).toLocaleString()}</td>
