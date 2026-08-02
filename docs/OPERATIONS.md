@@ -49,9 +49,11 @@ branches have been merged and deleted. `main` is **not protected** — and on
 2026-08-02 it was deleted by accident during a branch cleanup and had to be
 restored by force-pushing from a session's local clone. That clone no longer
 exists. Protecting `main` is item 1 in §7 for this reason: there is no
-longer a second copy of this history anywhere. Note that `main` also carries two unrelated side projects in
-`dealer-dash/` and `weightloss-app/`; they share the repo but nothing else,
-and no CI job or deploy step touches them.
+longer a second copy of this history anywhere.
+
+Note that `main` also carries two unrelated side projects in `dealer-dash/`
+and `weightloss-app/`; they share the repo but nothing else, and no CI job
+or deploy step touches them.
 
 Deployment is still done **directly from a branch via Wrangler** (see §6),
 not by a git-based pipeline — merging to `main` does not deploy anything.
