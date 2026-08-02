@@ -39,6 +39,10 @@ Google/GSC data lives under pauldanielstone@gmail.com).
   all validated on Postgres 16 and **0011 applied in production**.
 - **Query ownership, conflict tracking and entity discovery are live.**
   DataForSEO secrets are set on the web worker, so competitor mining works.
+  The 0011 RLS site/organisation binding is confirmed in production (all
+  three policies carry `WITH CHECK`). `supabase/maintenance/0011_rls_repair.sql`
+  is retained as an idempotent repair should those policies ever be
+  recreated without it.
 
 `main` **now contains** all the entity-builder work through the entity
 graph phase (the old `claude/entity-topical-authority-1ah7km` branch was
@@ -224,30 +228,21 @@ are pasted into the SQL Editor by hand.
 
 ## 7. Outstanding items / things a new operator should action
 
-1. **Confirm the 0011 RLS binding** (one paste, idempotent, safe to
-   re-run): `supabase/maintenance/0011_rls_repair.sql`. Migration 0011
-   itself is applied and verified, but if an early copy of it ran before
-   the site/organisation binding was added, the `create policy` statements
-   in the later re-run would have failed while everything else succeeded —
-   leaving the *unbound* policies in place. That is the cross-tenant hole
-   described in §8. The repair script drops and recreates all three
-   policies correctly whatever the current state, and prints a
-   verification table: all three rows must read `t | t`.
-2. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
+1. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
    was pasted into a chat and is still in use on the worker. Recommended:
    Supabase → Project Settings → API Keys → delete the old secret key →
    create a new one → set it as `SUPABASE_SERVICE_ROLE_KEY` on the
    `entity-builder-web` worker (`npx wrangler secret put`).
-3. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
+2. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
    the app: campaign → **Entity graph** → review and **Approve** the ones
    these businesses genuinely provide (reject the rest). Nothing downstream
    (page manifests) can proceed until this is done. Rule: humans approve;
    the system never auto-promotes (`docs/ENTITY_SYSTEM.md`).
-4. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
+3. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
    To onboard: campaign page → Add site (bare domain is fine) → filter the
    property list → Link → Queue a **Backfill**. Backfills run automatically
    thereafter; nightly analysis folds new sites in.
-5. **Connect other Google accounts** if properties live under logins other
+4. **Connect other Google accounts** if properties live under logins other
    than pauldanielstone@gmail.com (add them as OAuth test users first).
 
 ---
