@@ -294,3 +294,44 @@ export function rankedKeywordsAsDemand(
     position: k.rank,
   }));
 }
+
+export interface DemandRow {
+  query: string;
+  clicks: number;
+  impressions: number;
+  position: number | null;
+}
+
+/**
+ * Merge demand rows gathered from several competitor domains.
+ *
+ * Search volume is a property of the KEYWORD, not of the domain ranking
+ * for it. Competitors overlap heavily by definition, so concatenating
+ * their keyword lists counts the same market demand once per competitor —
+ * a keyword shared by five rivals would look five times as valuable and
+ * distort both the candidate ranking and the evidence shown to a reviewer.
+ *
+ * One row per keyword: the highest volume estimate seen (providers differ
+ * slightly between calls) and the best rank any competitor holds.
+ */
+export function mergeDemandByKeyword(rows: DemandRow[]): DemandRow[] {
+  const merged = new Map<string, DemandRow>();
+  for (const row of rows) {
+    const key = row.query.trim().toLowerCase();
+    if (key.length === 0) continue;
+    const seen = merged.get(key);
+    if (!seen) {
+      merged.set(key, { ...row });
+      continue;
+    }
+    seen.impressions = Math.max(seen.impressions, row.impressions);
+    seen.clicks = Math.max(seen.clicks, row.clicks);
+    seen.position =
+      seen.position == null
+        ? row.position
+        : row.position == null
+          ? seen.position
+          : Math.min(seen.position, row.position);
+  }
+  return [...merged.values()].sort((a, b) => b.impressions - a.impressions);
+}

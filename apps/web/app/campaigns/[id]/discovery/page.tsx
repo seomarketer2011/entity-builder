@@ -83,11 +83,13 @@ function CandidateCard({
   candidate,
   campaignId,
   siteId,
+  industrySlug,
   entities,
 }: {
   candidate: CandidateRow;
   campaignId: string;
   siteId: string;
+  industrySlug: string;
   entities: EntityOption[];
 }) {
   const blocked = candidate.capability_supported === false;
@@ -99,6 +101,7 @@ function CandidateCard({
       <form action={reviewCandidates} style={{ margin: 0 }}>
         <input type="hidden" name="campaignId" value={campaignId} />
         <input type="hidden" name="siteId" value={siteId} />
+        <input type="hidden" name="industry" value={industrySlug} />
         <input type="hidden" name="candidateIds" value={candidate.id} />
 
         <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -172,6 +175,11 @@ function CandidateCard({
             Blocked: this site records it as not provided. Approving is disabled (rule 1).
           </p>
         ) : null}
+        <p className="evidence" style={{ margin: "0.4rem 0 0" }}>
+          The capability flag above is from the last discovery run. Approval re-checks the name you
+          submit against this site&apos;s current capability records, so a rename can still be
+          refused.
+        </p>
       </form>
     </div>
   );
@@ -182,10 +190,16 @@ export default async function DiscoveryPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ site?: string; error?: string; notice?: string; show?: string }>;
+  searchParams: Promise<{
+    site?: string;
+    industry?: string;
+    error?: string;
+    notice?: string;
+    show?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { site: siteParam, error, notice, show } = await searchParams;
+  const { site: siteParam, industry: industryParam, error, notice, show } = await searchParams;
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -214,12 +228,22 @@ export default async function DiscoveryPage({
     candidates = (data ?? []) as CandidateRow[];
   }
 
-  // The approved graph a proposal can attach to.
-  const { data: entityRows } = await supabase
-    .from("entities")
-    .select("id, canonical_name, entity_type, status")
-    .neq("status", "rejected")
-    .order("canonical_name");
+  // Which industry graph this run is about. Coverage is judged against it
+  // and approved candidates are created in it, so it is always explicit.
+  const { data: industryRows } = await supabase.from("industries").select("id, slug, name").order("name");
+  const industries = (industryRows ?? []) as Array<{ id: string; slug: string; name: string }>;
+  const industry = industries.find((i) => i.slug === industryParam) ?? industries[0];
+
+  // The graph a proposal can attach to, scoped to that industry
+  // (industry_id IS NULL means cross-industry, so those belong too).
+  const { data: entityRows } = industry
+    ? await supabase
+        .from("entities")
+        .select("id, canonical_name, entity_type, status")
+        .neq("status", "rejected")
+        .or(`industry_id.eq.${industry.id},industry_id.is.null`)
+        .order("canonical_name")
+    : { data: [] };
   const entities = (entityRows ?? []) as EntityOption[];
   const coreEntities = entities.filter(
     (e) => e.entity_type === "industry_core" || e.entity_type === "service",
@@ -257,6 +281,13 @@ export default async function DiscoveryPage({
             </option>
           ))}
         </select>
+        <select name="industry" defaultValue={industry?.slug ?? ""}>
+          {industries.map((i) => (
+            <option key={i.id} value={i.slug}>
+              {i.name}
+            </option>
+          ))}
+        </select>
         <select name="show" defaultValue={showReviewed ? "reviewed" : "pending"}>
           <option value="pending">Pending review</option>
           <option value="reviewed">Already reviewed</option>
@@ -274,7 +305,8 @@ export default async function DiscoveryPage({
         <form className="inline" action={runDiscovery} style={{ margin: 0 }}>
           <input type="hidden" name="campaignId" value={id} />
           <input type="hidden" name="siteId" value={siteId} />
-          <button name="serp" value="0">
+          <input type="hidden" name="industry" value={industry?.slug ?? ""} />
+          <button name="serp" value="0" disabled={!industry}>
             Find from search demand
           </button>
           <button name="serp" value="1" className="secondary">
@@ -306,6 +338,7 @@ export default async function DiscoveryPage({
               <form action={reviewCandidates} className="inline" style={{ margin: 0 }}>
                 <input type="hidden" name="campaignId" value={id} />
                 <input type="hidden" name="siteId" value={siteId} />
+                <input type="hidden" name="industry" value={industry?.slug ?? ""} />
                 <input type="hidden" name="candidateIds" value={pendingIds.join(",")} />
                 <strong>{candidates.length} proposals awaiting review.</strong>
                 <button name="decision" value="rejected" className="secondary">
@@ -395,6 +428,7 @@ export default async function DiscoveryPage({
                       candidate={c}
                       campaignId={id}
                       siteId={siteId}
+                      industrySlug={industry?.slug ?? ""}
                       entities={entities}
                     />
                   ))}
@@ -412,6 +446,7 @@ export default async function DiscoveryPage({
                       candidate={c}
                       campaignId={id}
                       siteId={siteId}
+                      industrySlug={industry?.slug ?? ""}
                       entities={entities}
                     />
                   ))}

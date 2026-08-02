@@ -1,5 +1,7 @@
+import { assessCapability, type CapabilityRecord } from "@entity-builder/entity-engine";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -71,27 +73,47 @@ export async function POST(request: Request) {
     .in("id", ids);
   if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
 
+  // Current capability records per site, loaded now rather than trusting
+  // the flag cached when discovery last ran. Capabilities change, and the
+  // reviewer can rename a candidate to something excluded before approving.
+  const siteIds = [...new Set((candidates ?? []).map((c) => c.site_id as string))];
+  const capabilitiesBySite = new Map<string, CapabilityRecord[]>();
+  if (siteIds.length > 0) {
+    const { data: capabilityRows } = await db
+      .from("business_capabilities")
+      .select("site_id, kind, value")
+      .in("site_id", siteIds);
+    for (const row of (capabilityRows ?? []) as Array<CapabilityRecord & { site_id: string }>) {
+      const list = capabilitiesBySite.get(row.site_id) ?? [];
+      list.push({ kind: row.kind, value: row.value });
+      capabilitiesBySite.set(row.site_id, list);
+    }
+  }
+
   const approved: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
   for (const candidate of candidates ?? []) {
     const override = overrides[candidate.id] ?? {};
 
-    if (candidate.capability_supported === false) {
-      blocked.push({
-        id: candidate.id,
-        name: candidate.suggested_name,
-        reason:
-          "This site's business capabilities record it as NOT provided. " +
-          "Update the capability record first if that is wrong.",
-      });
-      continue;
-    }
-
     const name = (override.name ?? candidate.suggested_name).trim();
     const entityType = override.type ?? candidate.suggested_type;
     if (name.length === 0) {
       blocked.push({ id: candidate.id, name: candidate.suggested_name, reason: "empty name" });
+      continue;
+    }
+
+    // Rule 1, enforced against the name actually being approved and the
+    // capabilities as they stand right now — not the flag stored at
+    // discovery time, which a rename or a capability edit can invalidate.
+    const verdict = assessCapability(name, capabilitiesBySite.get(candidate.site_id) ?? []);
+    if (verdict.supported === false) {
+      blocked.push({
+        id: candidate.id,
+        name,
+        reason:
+          `${verdict.note} Update the capability record first if that is wrong.`,
+      });
       continue;
     }
 
@@ -162,7 +184,7 @@ export async function POST(request: Request) {
         source_id: sourceId,
         excerpt:
           `${candidate.query_count} queries, ${candidate.impressions} impressions. ` +
-          `${candidate.capability_note ?? ""}`.trim(),
+          `${verdict.note}`.trim(),
       });
     }
 

@@ -289,6 +289,21 @@ are pasted into the SQL Editor by hand.
 - **`unique nulls not distinct`** (PG15+) is what makes `entity_candidates`
   re-mining idempotent when `location_name` is NULL — a plain unique
   constraint would let duplicates accumulate.
+- **Org-scoped RLS is not enough on tables that also carry a `site_id`.**
+  Checking `is_org_member(organisation_id)` alone lets a tenant insert a
+  row with their own org and *another tenant's* site; the service-role
+  analyzer then selects by `site_id` and fills that readable row with the
+  victim's metrics. `query_conflicts` and `entity_candidates` use
+  `site_owned_by(site_id, organisation_id)` in both `USING` and
+  `WITH CHECK`. Copy that pattern on any new site-scoped table.
+- **Row-capped RPCs must never be used to MEASURE anything, only to
+  discover.** `gsc_query_page_totals` is globally ordered and limited, so
+  an absent query means "outside the cap" just as often as "no
+  impressions". Conflict tracking re-reads exact rows via
+  `gsc_query_page_totals_for_queries`.
+- **Discovery needs an explicit industry.** Entity coverage and the
+  industry a candidate is approved into both depend on it, and it is never
+  inferred from whatever row came back first.
 
 ---
 

@@ -1,18 +1,22 @@
 import {
+  assessCapability,
   buildLocationVocabulary,
   mineEntityCandidates,
+  type CapabilityRecord,
   type EntityCandidate,
   type KnownEntity,
   type MinedQuery,
 } from "@entity-builder/entity-engine";
 import {
   createDataForSeoClient,
+  mergeDemandByKeyword,
   normaliseDomain,
   rankedKeywordsAsDemand,
   SERP_LIMITS,
 } from "@entity-builder/serp";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -48,55 +52,19 @@ interface SiteRef {
   domain: string;
 }
 
-/**
- * Rule 1: a site only ever gets entities it genuinely provides. The miner
- * proposes from demand; this flags whether the business's own capability
- * records support the proposal, and the reviewer sees that flag. A
- * `service_not_provided` record is a hard no.
- */
-function assessCapability(
-  candidate: EntityCandidate,
-  capabilities: Array<{ kind: string; value: string }>,
-): { supported: boolean | null; note: string } {
-  const name = candidate.suggestedName.toLowerCase();
-  const matches = (value: string) => {
-    const v = value.toLowerCase();
-    return name.includes(v) || v.includes(name);
-  };
-
-  const excluded = capabilities.find((c) => c.kind === "service_not_provided" && matches(c.value));
-  if (excluded) {
-    return {
-      supported: false,
-      note: `Declared NOT provided: "${excluded.value}". Do not approve for this site.`,
-    };
-  }
-  const provided = capabilities.find(
-    (c) => (c.kind === "service_provided" || c.kind === "common_job") && matches(c.value),
-  );
-  if (provided) {
-    return { supported: true, note: `Matches declared capability "${provided.value}".` };
-  }
-  return {
-    supported: null,
-    note:
-      capabilities.length === 0
-        ? "No business capabilities recorded for this site — capability cannot be verified."
-        : "No capability record matches. Confirm the business genuinely offers this before approving.",
-  };
-}
-
 async function upsertCandidates(
   db: ReturnType<typeof admin>,
   site: SiteRef,
   industryId: string | null,
   source: "gsc_demand" | "serp_competitor",
   candidates: EntityCandidate[],
-  capabilities: Array<{ kind: string; value: string }>,
+  capabilities: CapabilityRecord[],
 ): Promise<number> {
   let written = 0;
   for (const candidate of candidates.slice(0, MAX_CANDIDATES_PER_SOURCE)) {
-    const capability = assessCapability(candidate, capabilities);
+    // Stored as a hint for the reviewer. Approval re-derives it from the
+    // capabilities current at that moment — see review-candidate/route.ts.
+    const capability = assessCapability(candidate.suggestedName, capabilities);
     const { error } = await db.from("entity_candidates").upsert(
       {
         organisation_id: site.organisation_id,
@@ -126,27 +94,36 @@ async function upsertCandidates(
   return written;
 }
 
-async function discoverForSite(db: ReturnType<typeof admin>, site: SiteRef, useSerp: boolean) {
+async function discoverForSite(
+  db: ReturnType<typeof admin>,
+  site: SiteRef,
+  industry: { id: string; slug: string },
+  useSerp: boolean,
+) {
   const notes: string[] = [];
 
-  // The graph as it stands: anything already covered is not a gap.
+  // The graph as it stands, scoped to the industry being discovered for.
+  // Without the filter an entity from an unrelated industry would count as
+  // coverage and silently suppress a valid proposal. industry_id IS NULL
+  // means cross-industry (see migration 0004), so those still count.
   const { data: entityRows } = await db
     .from("entities")
     .select("id, canonical_name, entity_type, status, industry_id, entity_aliases(alias)")
-    .neq("status", "rejected");
+    .neq("status", "rejected")
+    .or(`industry_id.eq.${industry.id},industry_id.is.null`);
   const entities: KnownEntity[] = (entityRows ?? []).map((e: any) => ({
     id: e.id,
     canonicalName: e.canonical_name,
     entityType: e.entity_type,
     aliases: (e.entity_aliases ?? []).map((a: any) => a.alias),
   }));
-  const industryId: string | null = (entityRows ?? [])[0]?.industry_id ?? null;
+  const industryId = industry.id;
 
   const { data: capabilityRows } = await db
     .from("business_capabilities")
     .select("kind, value")
     .eq("site_id", site.id);
-  const capabilities = (capabilityRows ?? []) as Array<{ kind: string; value: string }>;
+  const capabilities = (capabilityRows ?? []) as CapabilityRecord[];
 
   // Locations the operator actually works in (rule 1 applies to places as
   // much as services): site names, declared geographic limits, and any
@@ -217,11 +194,15 @@ async function discoverForSite(db: ReturnType<typeof admin>, site: SiteRef, useS
           .filter((d) => d !== normaliseDomain(site.domain))
           .slice(0, SERP_LIMITS.maxCompetitors);
 
-        const demand: MinedQuery[] = [];
+        // Competitors overlap heavily, so the same keyword comes back
+        // from several domains. mergeDemandByKeyword collapses those to
+        // one row — see its comment for why summing would be wrong.
+        const collected: MinedQuery[] = [];
         for (const target of targets) {
           const keywords = await client.rankedKeywords(target, { maxRank: 20 });
-          demand.push(...rankedKeywordsAsDemand(keywords));
+          collected.push(...rankedKeywordsAsDemand(keywords));
         }
+        const demand: MinedQuery[] = mergeDemandByKeyword(collected);
 
         if (demand.length > 0) {
           const mined = mineEntityCandidates(demand, entities, {
@@ -293,6 +274,43 @@ export async function POST(request: Request) {
     if (!campaign) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  // Discovery must run against one named industry: coverage is judged
+  // against that industry's graph, and approved candidates are created in
+  // it. Inferring it would mean guessing, and guessing wrong files entities
+  // under the wrong industry.
+  const industrySlug = url.searchParams.get("industry");
+  const { data: industries } = await db.from("industries").select("id, slug").order("slug");
+  const available = (industries ?? []) as Array<{ id: string; slug: string }>;
+
+  const resolved = industrySlug
+    ? available.find((i) => i.slug === industrySlug)
+    : available.length === 1
+      ? available[0] // unambiguous
+      : undefined;
+
+  let industry: { id: string; slug: string };
+  if (resolved) {
+    industry = resolved;
+  } else if (industrySlug) {
+    return NextResponse.json(
+      { error: `unknown industry: ${industrySlug}`, available: available.map((i) => i.slug) },
+      { status: 400 },
+    );
+  } else if (available.length === 0) {
+    return NextResponse.json(
+      { error: "no industry graph imported yet — import one on the Entity graph page first" },
+      { status: 400 },
+    );
+  } else {
+    return NextResponse.json(
+      {
+        error: "industry required when more than one industry graph exists",
+        available: available.map((i) => i.slug),
+      },
+      { status: 400 },
+    );
+  }
+
   let query = db.from("sites").select("id, organisation_id, campaign_id, name, domain");
   if (campaignId) query = query.eq("campaign_id", campaignId);
   if (siteId) query = query.eq("id", siteId);
@@ -301,7 +319,7 @@ export async function POST(request: Request) {
   const results = [];
   for (const site of (sites ?? []) as SiteRef[]) {
     try {
-      results.push(await discoverForSite(db, site, useSerp));
+      results.push(await discoverForSite(db, site, industry, useSerp));
     } catch (error) {
       results.push({
         site: site.name,
@@ -309,5 +327,5 @@ export async function POST(request: Request) {
       });
     }
   }
-  return NextResponse.json({ discovered: results });
+  return NextResponse.json({ industry: industry.slug, discovered: results });
 }

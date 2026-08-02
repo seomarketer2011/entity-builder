@@ -53,6 +53,17 @@ Two sources, both feeding the same clustering and naming pipeline:
   topics it has no page for, so its own GSC data can never reveal that kind
   of gap. Metered and paid, therefore opt-in per run.
 
+### Scope: one industry per run
+
+Discovery always runs against a **named industry**, passed explicitly.
+Coverage is judged against that industry's graph and approved candidates
+are created in it, so inferring it is not acceptable: an entity from an
+unrelated industry would silently suppress a valid proposal, and approved
+candidates would be filed under whichever industry happened to come back
+first. When exactly one industry graph exists the request may omit it;
+with more than one the API returns 400 and lists the valid slugs.
+Cross-industry entities (`industry_id IS NULL`) always count as coverage.
+
 ### Pipeline
 
 1. **Exclude branded queries** — they describe the business, not what it
@@ -75,6 +86,13 @@ Two sources, both feeding the same clustering and naming pipeline:
    ("locked out of car").
 6. **Suggest a type** from the wording — a suggestion the reviewer can
    change, never a decision.
+
+For competitor mining there is a step 0: **merge the keyword lists**.
+Search volume is a property of the keyword, not of the domain ranking for
+it, and competitors overlap by definition. Concatenating five rivals' lists
+would count the same market demand five times, so `mergeDemandByKeyword`
+keeps one row per keyword — the highest volume estimate seen and the best
+rank any competitor holds.
 
 ### Constants (`ENTITY_MINING`)
 
@@ -115,6 +133,15 @@ Every candidate is assessed against the site's `business_capabilities`:
 A `not provided` candidate **cannot be approved** — the API rejects it and
 the UI disables the button. The system must never claim a business does
 something it has explicitly said it does not.
+
+The stored flag is a **hint, not the authority**. Capability records change
+after discovery runs, and the reviewer can rename a candidate before
+approving it. Approval therefore reloads the site's current capabilities
+and re-assesses **the name actually being submitted** — so renaming a
+supported candidate to an excluded service is refused, as is approving one
+whose site gained a `service_not_provided` record in the meantime. The
+shared rule lives in `packages/entity-engine/src/capability.ts` and is
+table-tested.
 
 ## Extraction stack
 

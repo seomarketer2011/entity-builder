@@ -20,10 +20,14 @@ async function callInternal(path: string, body?: unknown): Promise<Response> {
 export async function runDiscovery(formData: FormData): Promise<void> {
   const campaignId = String(formData.get("campaignId") ?? "");
   const siteId = String(formData.get("siteId") ?? "");
+  const industry = String(formData.get("industry") ?? "");
   const useSerp = String(formData.get("serp") ?? "") === "1";
 
   const params = new URLSearchParams({ campaign: campaignId });
   if (siteId) params.set("site", siteId);
+  // Explicit: coverage is judged against this industry's graph and approved
+  // candidates are created in it, so it is never inferred.
+  if (industry) params.set("industry", industry);
   if (useSerp) params.set("serp", "1");
 
   const response = await callInternal(`/api/internal/discover-entities?${params.toString()}`);
@@ -39,7 +43,9 @@ export async function runDiscovery(formData: FormData): Promise<void> {
     error?: string;
   };
 
-  const target = `/campaigns/${campaignId}/discovery?site=${siteId}`;
+  const target =
+    `/campaigns/${campaignId}/discovery?site=${siteId}` +
+    (industry ? `&industry=${encodeURIComponent(industry)}` : "");
   if (!response.ok) {
     redirect(`${target}&error=${encodeURIComponent(body.error ?? "discovery failed")}`);
   }
@@ -63,11 +69,14 @@ export async function reviewCandidates(formData: FormData): Promise<void> {
   const campaignId = String(formData.get("campaignId") ?? "");
   const siteId = String(formData.get("siteId") ?? "");
   const decision = String(formData.get("decision") ?? "");
+  const industry = String(formData.get("industry") ?? "");
   const candidateIds = String(formData.get("candidateIds") ?? "")
     .split(",")
     .filter(Boolean);
 
-  const target = `/campaigns/${campaignId}/discovery?site=${siteId}`;
+  const target =
+    `/campaigns/${campaignId}/discovery?site=${siteId}` +
+    (industry ? `&industry=${encodeURIComponent(industry)}` : "");
   if (!campaignId || candidateIds.length === 0) redirect(target);
 
   // Per-row reviewer edits, when the form carried them.

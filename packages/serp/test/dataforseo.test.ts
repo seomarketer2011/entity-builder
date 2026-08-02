@@ -4,6 +4,7 @@ import rankedFixture from "./fixtures/ranked-keywords.json" with { type: "json" 
 import {
   createDataForSeoClient,
   LOCATION_UK,
+  mergeDemandByKeyword,
   normaliseDomain,
   rankedKeywordsAsDemand,
   SERP_LIMITS,
@@ -222,5 +223,85 @@ describe("rankedKeywordsAsDemand", () => {
 
   it("returns an empty list for no keywords", () => {
     expect(rankedKeywordsAsDemand([])).toEqual([]);
+  });
+});
+
+describe("mergeDemandByKeyword", () => {
+  it("counts a keyword shared by several competitors once", () => {
+    // The bug this prevents: five rivals ranking for the same keyword
+    // would otherwise report five times the real market demand.
+    const merged = mergeDemandByKeyword([
+      { query: "car key programming", clicks: 0, impressions: 880, position: 4 },
+      { query: "car key programming", clicks: 0, impressions: 880, position: 9 },
+      { query: "car key programming", clicks: 0, impressions: 880, position: 2 },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.impressions).toBe(880);
+  });
+
+  it("keeps the best rank any competitor holds", () => {
+    const merged = mergeDemandByKeyword([
+      { query: "k", clicks: 0, impressions: 10, position: 12 },
+      { query: "k", clicks: 0, impressions: 10, position: 3 },
+    ]);
+    expect(merged[0]!.position).toBe(3);
+  });
+
+  it("keeps the highest volume estimate when providers disagree", () => {
+    const merged = mergeDemandByKeyword([
+      { query: "k", clicks: 0, impressions: 500, position: 4 },
+      { query: "k", clicks: 0, impressions: 720, position: 4 },
+    ]);
+    expect(merged[0]!.impressions).toBe(720);
+  });
+
+  it("treats case and surrounding space as the same keyword", () => {
+    const merged = mergeDemandByKeyword([
+      { query: "Car Key Programming", clicks: 0, impressions: 100, position: 5 },
+      { query: " car key programming ", clicks: 0, impressions: 100, position: 5 },
+    ]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("keeps distinct keywords apart", () => {
+    const merged = mergeDemandByKeyword([
+      { query: "a", clicks: 0, impressions: 10, position: 1 },
+      { query: "b", clicks: 0, impressions: 20, position: 1 },
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("survives a null rank on either side", () => {
+    expect(
+      mergeDemandByKeyword([
+        { query: "k", clicks: 0, impressions: 10, position: null },
+        { query: "k", clicks: 0, impressions: 10, position: 7 },
+      ])[0]!.position,
+    ).toBe(7);
+    expect(
+      mergeDemandByKeyword([
+        { query: "k", clicks: 0, impressions: 10, position: 7 },
+        { query: "k", clicks: 0, impressions: 10, position: null },
+      ])[0]!.position,
+    ).toBe(7);
+    expect(
+      mergeDemandByKeyword([
+        { query: "k", clicks: 0, impressions: 10, position: null },
+        { query: "k", clicks: 0, impressions: 10, position: null },
+      ])[0]!.position,
+    ).toBeNull();
+  });
+
+  it("drops blank keywords and handles an empty list", () => {
+    expect(mergeDemandByKeyword([{ query: "  ", clicks: 0, impressions: 5, position: 1 }])).toEqual([]);
+    expect(mergeDemandByKeyword([])).toEqual([]);
+  });
+
+  it("orders by demand", () => {
+    const merged = mergeDemandByKeyword([
+      { query: "small", clicks: 0, impressions: 10, position: 1 },
+      { query: "big", clicks: 0, impressions: 900, position: 1 },
+    ]);
+    expect(merged.map((m) => m.query)).toEqual(["big", "small"]);
   });
 });

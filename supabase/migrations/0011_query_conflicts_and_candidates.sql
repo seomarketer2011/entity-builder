@@ -92,6 +92,37 @@ language sql stable security invoker as $$
   limit least(p_limit, 5000)
 $$;
 
+-- Complete (query, page) rows for an explicit list of queries.
+--
+-- gsc_query_page_totals is globally ordered and limited, so on a large site
+-- a tracked query can fall outside the cutoff, or have only some of its
+-- pages survive it. Conflict tracking must never read that as "the query
+-- lost its impressions" or compute an owner share from partial pages — it
+-- would write a permanent, wrong `collapsed` snapshot. This function is
+-- bounded by the number of queries asked for, not by a global row cap.
+create or replace function gsc_query_page_totals_for_queries(
+  p_site_id uuid, p_from date, p_to date, p_queries text[]
+)
+returns table(
+  query text, page text, clicks bigint, impressions bigint,
+  ctr double precision, "position" double precision
+)
+language sql stable security invoker as $$
+  select query,
+         page,
+         sum(clicks)::bigint,
+         sum(impressions)::bigint,
+         case when sum(impressions) > 0
+              then sum(clicks)::double precision / sum(impressions) else 0 end,
+         case when sum(impressions) > 0
+              then sum(position * impressions) / sum(impressions) else null end
+  from gsc_daily_query_page
+  where site_id = p_site_id
+    and date between p_from and p_to
+    and query = any(p_queries)
+  group by query, page
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 2. Conflict lifecycle
 -- ---------------------------------------------------------------------------
@@ -169,11 +200,32 @@ create index on query_conflict_snapshots (conflict_id, captured_on desc);
 alter table query_conflicts enable row level security;
 alter table query_conflict_snapshots enable row level security;
 
+-- Checking is_org_member(organisation_id) alone is NOT enough: a member of
+-- org A could insert a row carrying their own organisation_id but another
+-- tenant's site_id. The service-role analyzer selects by site_id, so it
+-- would then fill that attacker-readable row with the victim site's
+-- metrics. site_owned_by() forces the two columns to agree.
+create or replace function site_owned_by(p_site_id uuid, p_organisation_id uuid)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from sites s
+    where s.id = p_site_id and s.organisation_id = p_organisation_id
+  );
+$$;
+
 create policy query_conflicts_by_org on query_conflicts for all
-  using (is_org_member(organisation_id));
+  using (is_org_member(organisation_id) and site_owned_by(site_id, organisation_id))
+  with check (is_org_member(organisation_id) and site_owned_by(site_id, organisation_id));
 
 create policy query_conflict_snapshots_by_org on query_conflict_snapshots for all
   using (
+    exists (
+      select 1 from query_conflicts c
+      where c.id = conflict_id and is_org_member(c.organisation_id)
+    )
+  )
+  with check (
     exists (
       select 1 from query_conflicts c
       where c.id = conflict_id and is_org_member(c.organisation_id)
@@ -233,5 +285,8 @@ create index on entity_candidates (organisation_id, status);
 
 alter table entity_candidates enable row level security;
 
+-- Same site/organisation binding as query_conflicts above: without it a
+-- member of one org could stage a candidate against another org's site.
 create policy entity_candidates_by_org on entity_candidates for all
-  using (is_org_member(organisation_id));
+  using (is_org_member(organisation_id) and site_owned_by(site_id, organisation_id))
+  with check (is_org_member(organisation_id) and site_owned_by(site_id, organisation_id));

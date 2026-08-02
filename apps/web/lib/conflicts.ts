@@ -34,6 +34,7 @@ interface ConflictRow {
 /** Minimal shape of the supabase-js client used here. */
 type Db = {
   from: (table: string) => any;
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: any; error: any }>;
 };
 
 export interface TrackConflictsResult {
@@ -70,8 +71,12 @@ export async function trackConflicts(
   rows: QueryPageTotals[],
   window: { from: string; to: string },
 ): Promise<TrackConflictsResult> {
-  const observations = buildObservations(rows);
-  const byQuery = new Map(observations.map((o) => [o.query, o]));
+  // `rows` comes from a globally ordered, row-capped RPC, so it is only
+  // safe for DISCOVERING newly contested queries. It must not be used to
+  // measure an already-tracked query: that query may have fallen outside
+  // the cap, or had only some of its pages survive it, and either would be
+  // misread as lost demand and written as a permanent `collapsed`.
+  const discovered = buildObservations(rows);
 
   const { data: existingRows } = await db
     .from("query_conflicts")
@@ -88,9 +93,44 @@ export async function trackConflicts(
   // conflict that stopped being contested still gets measured — that is
   // the whole point of tracking).
   const queries = new Set<string>([
-    ...observations.filter(isTrackable).map((o) => o.query),
+    ...discovered.filter(isTrackable).map((o) => o.query),
     ...existing.keys(),
   ]);
+
+  // Re-read complete (query, page) rows for exactly these queries. Bounded
+  // by the number of tracked conflicts, not by a global row cap, so every
+  // measurement below is made on the query's full page set.
+  const byQuery = new Map<string, ConflictObservation>();
+  const queryList = [...queries];
+  const CHUNK = 200;
+  let exactFetchFailed = false;
+  for (let i = 0; i < queryList.length; i += CHUNK) {
+    const chunk = queryList.slice(i, i + CHUNK);
+    const { data, error } = await db.rpc("gsc_query_page_totals_for_queries", {
+      p_site_id: site.id,
+      p_from: window.from,
+      p_to: window.to,
+      p_queries: chunk,
+    });
+    if (error) {
+      exactFetchFailed = true;
+      break;
+    }
+    for (const o of buildObservations((data ?? []) as QueryPageTotals[])) {
+      byQuery.set(o.query, o);
+    }
+  }
+
+  // Without exact rows we cannot tell "no impressions" from "outside the
+  // cap", and guessing would corrupt the history permanently. Fail loudly
+  // instead — the caller records it as a note and the run continues.
+  if (exactFetchFailed) {
+    throw new Error(
+      "exact query/page rows unavailable (apply migration 0011: " +
+        "gsc_query_page_totals_for_queries) — refusing to write conflict " +
+        "history from a truncated result set",
+    );
+  }
 
   const result: TrackConflictsResult = {
     tracked: 0,

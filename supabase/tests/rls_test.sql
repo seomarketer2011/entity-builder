@@ -113,6 +113,51 @@ begin
   exception when insufficient_privilege or check_violation then
     null; -- expected
   end;
+
+  -- The subtle one: OWN organisation_id paired with ANOTHER tenant's
+  -- site_id. Checking org membership alone would allow this, and the
+  -- service-role analyzer — which selects by site_id — would then fill the
+  -- attacker-readable row with the victim site's metrics.
+  begin
+    insert into query_conflicts (organisation_id, site_id, query)
+    values ('00000000-0000-0000-0000-0000000000a0', '00000000-0000-0000-0000-0000000000b2',
+            'cross tenant');
+    raise exception 'RLS FAIL: user A attached a conflict to org B''s site';
+  exception when insufficient_privilege or check_violation then
+    null; -- expected: site_owned_by() forces the columns to agree
+  end;
+
+  begin
+    insert into entity_candidates
+      (organisation_id, site_id, discovery_source, suggested_name, suggested_type)
+    values ('00000000-0000-0000-0000-0000000000a0', '00000000-0000-0000-0000-0000000000b2',
+            'gsc_demand', 'cross tenant', 'service');
+    raise exception 'RLS FAIL: user A attached a candidate to org B''s site';
+  exception when insufficient_privilege or check_violation then
+    null; -- expected
+  end;
+
+  -- Positive control: the binding must not block legitimate work. This is
+  -- exactly what the "Mark seen" action does through the user's session.
+  update query_conflicts
+     set acknowledged_at = now(), acknowledged_by = '00000000-0000-0000-0000-00000000000a'
+   where id = '00000000-0000-0000-0000-0000000000a3';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'RLS FAIL: user A cannot acknowledge their own conflict'; end if;
+
+  insert into query_conflicts (organisation_id, site_id, query)
+  values ('00000000-0000-0000-0000-0000000000a0', '00000000-0000-0000-0000-0000000000a2', 'own row');
+
+  -- Updating a legitimately-owned row to point at another tenant's site
+  -- must fail too (WITH CHECK applies to UPDATE, not just INSERT).
+  begin
+    update query_conflicts
+       set site_id = '00000000-0000-0000-0000-0000000000b2'
+     where id = '00000000-0000-0000-0000-0000000000a3';
+    raise exception 'RLS FAIL: user A repointed a conflict at org B''s site';
+  exception when insufficient_privilege or check_violation then
+    null; -- expected
+  end;
 end $$;
 
 reset role;

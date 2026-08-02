@@ -115,6 +115,21 @@ Every comparison is made against the state captured at **first detection**,
 never against the previous run. Measuring run-over-run would let a slow
 multi-week decline read as a series of small improvements.
 
+### Measurement must use complete page sets
+
+`gsc_query_page_totals` is globally ordered and row-capped, so it is only
+safe for **discovering** newly contested queries. It must never be used to
+measure one already being tracked: on a large site that query may fall
+outside the cap, or have only some of its pages survive it, and zero rows
+is indistinguishable from zero impressions. Reading that as lost demand
+would write a permanent, wrong `collapsed` snapshot.
+
+Tracking therefore re-reads exact rows for the tracked queries through
+`gsc_query_page_totals_for_queries` (bounded by the number of conflicts,
+not a global cap). If that function is unavailable the run **fails loudly**
+rather than guessing — history is append-only and a wrong snapshot cannot
+be taken back.
+
 ### Statuses, in evaluation order
 
 | # | Status | Fires when |
