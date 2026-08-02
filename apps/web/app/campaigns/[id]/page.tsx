@@ -1,18 +1,35 @@
 import { notFound, redirect } from "next/navigation";
+import { buildObservations, type QueryPageTotals } from "@entity-builder/scoring";
+import {
+  QueryOwnerCell,
+  type ContenderRow,
+  type QueryOwnerRow,
+} from "@/components/query-owner";
 import { requireUser } from "@/lib/supabase/server";
 import { addSite, deleteSite, linkPropertyToSite, queueSyncJob } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+const TOP_QUERY_LIMIT = 10;
+const TOP_QUERY_WINDOW_DAYS = 28;
+
 export default async function CampaignPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; notice?: string; q?: string; confirmDelete?: string }>;
+  params: Promise<{
+    id: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+    notice?: string;
+    q?: string;
+    confirmDelete?: string;
+    site?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { error, notice, q, confirmDelete } = await searchParams;
+  const { error, notice, q, confirmDelete, site: siteParam } = await searchParams;
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -41,6 +58,49 @@ export default async function CampaignPage({
 
   const propertyUri = new Map((properties ?? []).map((p) => [p.id, p.property_uri]));
 
+  // Top queries with the URL that actually earns each one. Without this the
+  // overview shows demand with no indication of which page serves it.
+  const topSiteId = siteParam ?? campaign.sites[0]?.id;
+  const topSite = campaign.sites.find((s) => s.id === topSiteId);
+  let topQueries: QueryOwnerRow[] = [];
+  let topQueriesError: string | null = null;
+  const topSplits = new Map<string, ContenderRow[]>();
+  if (topSiteId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const windowFrom = new Date(Date.now() - TOP_QUERY_WINDOW_DAYS * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const { data, error: rpcError } = await supabase.rpc("gsc_query_owner_totals", {
+      p_site_id: topSiteId,
+      p_from: windowFrom,
+      p_to: today,
+      p_limit: TOP_QUERY_LIMIT,
+    });
+    if (rpcError) topQueriesError = rpcError.message;
+    topQueries = (data ?? []) as QueryOwnerRow[];
+
+    // Splits for the contested rows, so the badge expands here too rather
+    // than only in the Explorer. Asked for by query, so it stays cheap
+    // (at most TOP_QUERY_LIMIT queries) and always matches the badge.
+    const contested = topQueries
+      .filter((r) => Number(r.contender_count ?? 0) >= 2)
+      .map((r) => r.query);
+    if (contested.length > 0) {
+      const pairs = await supabase.rpc("gsc_query_page_totals_for_queries", {
+        p_site_id: topSiteId,
+        p_from: windowFrom,
+        p_to: today,
+        p_queries: contested,
+      });
+      if (!pairs.error) {
+        for (const o of buildObservations((pairs.data ?? []) as QueryPageTotals[])) {
+          if (o.contenders.length > 1) topSplits.set(o.query, o.contenders);
+        }
+      }
+    }
+  }
+  const contestedCount = topQueries.filter((r) => Number(r.contender_count) >= 2).length;
+
   return (
     <div>
       <h1>
@@ -48,6 +108,12 @@ export default async function CampaignPage({
         <span style={{ float: "right", display: "inline-flex", gap: "0.5rem" }}>
           <a className="button secondary" href={`/campaigns/${id}/entities`}>
             Entity graph
+          </a>
+          <a className="button secondary" href={`/campaigns/${id}/discovery`}>
+            Discovery
+          </a>
+          <a className="button secondary" href={`/campaigns/${id}/conflicts`}>
+            Conflicts
           </a>
           <a className="button" href={`/campaigns/${id}/opportunities`}>
             Opportunities →
@@ -113,6 +179,80 @@ export default async function CampaignPage({
           <input name="baseUrl" placeholder="example.com or https://example.com" required />
           <button>Add site</button>
         </form>
+      </div>
+
+      <h2 id="queries">Top queries — who owns them</h2>
+      <div className="card">
+        {campaign.sites.length > 1 ? (
+          <form className="inline" method="get" action={`/campaigns/${id}#queries`}>
+            <select name="site" defaultValue={topSiteId ?? ""}>
+              {campaign.sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button className="secondary">Show</button>
+          </form>
+        ) : null}
+        {topQueriesError ? (
+          <p className="error">
+            {topQueriesError} — apply migration 0011 (gsc_query_owner_totals).
+          </p>
+        ) : null}
+        {topQueries.length === 0 ? (
+          <p className="muted">
+            No query data yet{topSite ? ` for ${topSite.name}` : ""}. Queue a backfill below.
+          </p>
+        ) : (
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>Query / owning URL</th>
+                  <th className="num">Clicks</th>
+                  <th className="num">Impressions</th>
+                  <th className="num">Position</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topQueries.map((r) => (
+                  <tr key={r.query}>
+                    <QueryOwnerCell
+                      row={{
+                        ...r,
+                        clicks: Number(r.clicks),
+                        impressions: Number(r.impressions),
+                        ctr: Number(r.ctr),
+                        owner_impressions: Number(r.owner_impressions ?? 0),
+                        owner_share: Number(r.owner_share ?? 0),
+                        url_count: Number(r.url_count ?? 0),
+                        contender_count: Number(r.contender_count ?? 0),
+                      }}
+                      contenders={topSplits.get(r.query)}
+                      conflictHref={`/campaigns/${id}/conflicts?site=${topSiteId}&q=${encodeURIComponent(r.query)}`}
+                    />
+                    <td className="num">{Number(r.clicks).toLocaleString()}</td>
+                    <td className="num">{Number(r.impressions).toLocaleString()}</td>
+                    <td className="num">
+                      {r.position == null ? "—" : Number(r.position).toFixed(1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted">
+              Last {TOP_QUERY_WINDOW_DAYS} days
+              {topSite ? ` · ${topSite.name}` : ""}
+              {contestedCount > 0
+                ? ` · ${contestedCount} of these ${contestedCount === 1 ? "query is" : "queries are"} split across competing URLs`
+                : " · no competing URLs in the top queries"}
+              .{" "}
+              <a href={`/campaigns/${id}/explorer?site=${topSiteId}`}>Full explorer</a> ·{" "}
+              <a href={`/campaigns/${id}/conflicts?site=${topSiteId}`}>Track conflicts</a>
+            </p>
+          </>
+        )}
       </div>
 
       <h2 id="gsc">Google Search Console</h2>

@@ -3,3 +3,4 @@ export * from "./page-gate.js";
 export * from "./opportunity-score.js";
 export * from "./detectors.js";
 export * from "./detectors-v2.js";
+export * from "./conflict-lifecycle.js";

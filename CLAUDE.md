@@ -41,7 +41,10 @@ location).
 - `packages/domain` — shared TypeScript types mirroring the data model.
 - `packages/scoring` — deterministic engines: entity validation score,
   page-creation gate, opportunity priority score. Pure functions, fully tested.
-- `packages/entity-engine` — normalisation, alias handling, candidate pipeline.
+- `packages/entity-engine` — normalisation, alias handling, candidate pipeline,
+  entity discovery mining (location splitting, clustering, cluster naming).
+- `packages/serp` — DataForSEO Labs client (competitor domains, ranked
+  keywords). Injected fetch, per-run call budget, fully tested.
 - `packages/gsc` — Google OAuth, token crypto, Search Console client,
   sync planning/orchestration. Pure logic, injected fetch, fully tested.
 - `packages/database` — pg pool, idempotent GSC upserts, sync-job repo.
