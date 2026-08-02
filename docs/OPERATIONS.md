@@ -35,8 +35,10 @@ Google/GSC data lives under pauldanielstone@gmail.com).
   unowned-cluster findings).
 - **Entity graph:** locksmith-services template imported — **30 entities in
   `proposed` status, awaiting human approval** (see §7 outstanding items).
-- **Tests:** 197 passing across the packages. **Migrations:** 0001–0011, all
-  validated on Postgres 16.
+- **Tests:** 219 passing across the packages. **Migrations:** 0001–0011,
+  all validated on Postgres 16 and **0011 applied in production**.
+- **Query ownership, conflict tracking and entity discovery are live.**
+  DataForSEO secrets are set on the web worker, so competitor mining works.
 
 `main` **now contains** all the entity-builder work through the entity
 graph phase (the old `claude/entity-topical-authority-1ah7km` branch was
@@ -222,30 +224,30 @@ are pasted into the SQL Editor by hand.
 
 ## 7. Outstanding items / things a new operator should action
 
-1. **Apply migration 0011.** `supabase/migrations/0011_query_conflicts_and_candidates.sql`
-   adds `gsc_query_owner_totals` (query -> owning URL), the conflict
-   tracking tables, and `entity_candidates`. Until it is applied, the
-   Explorer's query view, the Conflicts page and the Discovery page all
-   show a "apply migration 0011" error and everything else keeps working.
-   Paste it into the Supabase SQL Editor and Run.
-2. **Set the DataForSEO secrets on the web worker** if competitor mining
-   is wanted in production:
-   `npx wrangler secret put DATAFORSEO_LOGIN` and `… DATAFORSEO_PASSWORD`.
-3. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
+1. **Confirm the 0011 RLS binding** (one paste, idempotent, safe to
+   re-run): `supabase/maintenance/0011_rls_repair.sql`. Migration 0011
+   itself is applied and verified, but if an early copy of it ran before
+   the site/organisation binding was added, the `create policy` statements
+   in the later re-run would have failed while everything else succeeded —
+   leaving the *unbound* policies in place. That is the cross-tenant hole
+   described in §8. The repair script drops and recreates all three
+   policies correctly whatever the current state, and prints a
+   verification table: all three rows must read `t | t`.
+2. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
    was pasted into a chat and is still in use on the worker. Recommended:
    Supabase → Project Settings → API Keys → delete the old secret key →
    create a new one → set it as `SUPABASE_SERVICE_ROLE_KEY` on the
    `entity-builder-web` worker (`npx wrangler secret put`).
-4. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
+3. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
    the app: campaign → **Entity graph** → review and **Approve** the ones
    these businesses genuinely provide (reject the rest). Nothing downstream
    (page manifests) can proceed until this is done. Rule: humans approve;
    the system never auto-promotes (`docs/ENTITY_SYSTEM.md`).
-5. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
+4. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
    To onboard: campaign page → Add site (bare domain is fine) → filter the
    property list → Link → Queue a **Backfill**. Backfills run automatically
    thereafter; nightly analysis folds new sites in.
-6. **Connect other Google accounts** if properties live under logins other
+5. **Connect other Google accounts** if properties live under logins other
    than pauldanielstone@gmail.com (add them as OAuth test users first).
 
 ---
