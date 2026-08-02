@@ -38,9 +38,14 @@ Google/GSC data lives under pauldanielstone@gmail.com).
 - **Tests:** 197 passing across the packages. **Migrations:** 0001–0011, all
   validated on Postgres 16.
 
-Development happens on branch **`claude/entity-topical-authority-1ah7km`**.
-It is **NOT yet merged to `main`** — deployment is done directly from this
-branch via Wrangler (see §6), not via a git-based CI pipeline.
+`main` **now contains** all the entity-builder work through the entity
+graph phase (the old `claude/entity-topical-authority-1ah7km` branch was
+merged). Note that `main` also carries two unrelated side projects in
+`dealer-dash/` and `weightloss-app/`; they share the repo but nothing else,
+and no CI job or deploy step touches them.
+
+Deployment is still done **directly from a branch via Wrangler** (see §6),
+not by a git-based pipeline — merging to `main` does not deploy anything.
 
 ---
 
@@ -185,10 +190,13 @@ export CLOUDFLARE_ACCOUNT_ID=44799b719f2192a9f066f425aaff3106
 npx wrangler deploy
 ```
 
-**Commit convention:** work on `claude/entity-topical-authority-1ah7km`,
-push there. A PR to `main` has NOT been opened yet — do so only when the
-owner asks. Once merged, connect the Supabase GitHub integration so
-migrations apply automatically.
+**Commit convention:** work on a feature branch, push there, and open a PR
+to `main` only when the owner asks. CI (`.github/workflows/ci.yml`) runs
+typecheck, tests, a web build, and applies every migration to a throwaway
+Postgres 16 with the RLS suite on each PR. Merging does **not** deploy —
+run the Wrangler steps above for that. Once the Supabase GitHub integration
+is connected, migrations can apply automatically on merge; until then they
+are pasted into the SQL Editor by hand.
 
 ### Repository map
 - `docs/` — all specs and rules (this file, plus the phase docs).
