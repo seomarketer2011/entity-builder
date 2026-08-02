@@ -25,12 +25,18 @@ importers:
       '@entity-builder/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@entity-builder/entity-engine':
+        specifier: workspace:*
+        version: link:../../packages/entity-engine
       '@entity-builder/gsc':
         specifier: workspace:*
         version: link:../../packages/gsc
       '@entity-builder/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
+      '@entity-builder/serp':
+        specifier: workspace:*
+        version: link:../../packages/serp
       '@supabase/ssr':
         specifier: ^0.6.1
         version: 0.6.1(@supabase/supabase-js@2.110.2)
@@ -160,6 +166,22 @@ importers:
         specifier: workspace:*
         version: link:../domain
     devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(terser@5.16.9)
+
+  packages/serp:
+    dependencies:
+      '@entity-builder/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

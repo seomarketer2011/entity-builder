@@ -10,6 +10,7 @@ import {
 } from "@entity-builder/scoring";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { trackConflicts, type TrackConflictsResult } from "@/lib/conflicts";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -84,8 +85,20 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
     p_to: to,
     p_limit: 3000,
   });
+  let conflicts: TrackConflictsResult | null = null;
   if (!queryPage.error) {
-    v2.push(...detectCannibalisation((queryPage.data ?? []) as QueryPageTotals[]));
+    const pairs = (queryPage.data ?? []) as QueryPageTotals[];
+    v2.push(...detectCannibalisation(pairs));
+    // Record how each conflict is moving over time. Independent of the
+    // opportunity feed: opportunities are regenerated every run, whereas
+    // conflict history must accumulate.
+    try {
+      conflicts = await trackConflicts(db, site, pairs, { from, to });
+    } catch (error) {
+      notes.push(
+        `conflict tracking skipped: ${error instanceof Error ? error.message : "failed"}`,
+      );
+    }
   } else {
     notes.push("cannibalisation skipped: apply migration 0010 (gsc_query_page_totals)");
   }
@@ -156,7 +169,12 @@ async function analyseSite(db: ReturnType<typeof admin>, site: SiteRef) {
     });
   }
 
-  return { site: site.name, findings: findings.length, ...(notes.length ? { notes } : {}) };
+  return {
+    site: site.name,
+    findings: findings.length,
+    ...(conflicts ? { conflicts } : {}),
+    ...(notes.length ? { notes } : {}),
+  };
 }
 
 export async function POST(request: Request) {

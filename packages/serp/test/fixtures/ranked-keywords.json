@@ -1,0 +1,88 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "cost": 0.01236,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "result": [
+        {
+          "target": "keytek.co.uk",
+          "total_count": 8716,
+          "items": [
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "keyword": "belfast living",
+                "keyword_info": {
+                  "search_volume": 450000,
+                  "cpc": 1.4199999570846558,
+                  "competition": 0
+                },
+                "search_intent_info": {
+                  "main_intent": "informational"
+                }
+              },
+              "ranked_serp_element": {
+                "serp_item": {
+                  "type": "organic",
+                  "rank_group": 7,
+                  "rank_absolute": 10,
+                  "domain": "www.keytek.co.uk",
+                  "url": "https://www.keytek.co.uk/local-area-guides/living-in-belfast/"
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "keyword": "manchester",
+                "keyword_info": {
+                  "search_volume": 450000,
+                  "cpc": 1.149999976158142,
+                  "competition": 0.019999999552965164
+                },
+                "search_intent_info": {
+                  "main_intent": "informational"
+                }
+              },
+              "ranked_serp_element": {
+                "serp_item": {
+                  "type": "organic",
+                  "rank_group": 68,
+                  "rank_absolute": 83,
+                  "domain": "www.keytek.co.uk",
+                  "url": "https://www.keytek.co.uk/local-area-guides/living-in-manchester/"
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "keyword_data": {
+                "keyword": "manchester manchester",
+                "keyword_info": {
+                  "search_volume": 450000,
+                  "cpc": 1.149999976158142,
+                  "competition": 0.019999999552965164
+                },
+                "search_intent_info": {
+                  "main_intent": "informational"
+                }
+              },
+              "ranked_serp_element": {
+                "serp_item": {
+                  "type": "organic",
+                  "rank_group": 65,
+                  "rank_absolute": 76,
+                  "domain": "www.keytek.co.uk",
+                  "url": "https://www.keytek.co.uk/local-area-guides/living-in-manchester/"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -69,6 +69,86 @@ this cluster").
 
 Still planned: `rising_query`, per-page attribution for `ctr_gap`.
 
+## Query ownership
+
+Every query in the Explorer and on the campaign overview is shown with the
+URL that actually earns it — the page taking the most impressions for that
+query in the window — via `gsc_query_owner_totals` (migration 0011). The
+same rollup is available in TypeScript as `buildObservations()` in
+`packages/scoring/src/conflict-lifecycle.ts`; the SQL and the TS agree by
+construction, so the Explorer and the detectors can never disagree about
+who owns a query.
+
+A query is flagged as **contested** only when at least two URLs each hold
+≥ 25% of its impressions (`CANNIBALISATION.minShare`). GSC reports a long
+tail of URLs with a handful of impressions for nearly every query; badging
+those would put a warning on almost every row and make the signal
+worthless. A query with one page on 80% and two on 10% each is *not*
+contested.
+
+## Cannibalisation tracking (conflict lifecycle)
+
+The `cannibalisation` detector says which pages compete *now*. The conflict
+lifecycle answers the follow-up question — **is it getting better?** —
+across successive nightly runs. Implemented in
+`packages/scoring/src/conflict-lifecycle.ts`; stored in `query_conflicts`
+and `query_conflict_snapshots` (migration 0011).
+
+Conflicts are tracked per **(site, query)**, not per page-set. When a losing
+page drops out, the page-set changes but the query does not — keying on the
+query is what distinguishes "this conflict resolved" from "a different
+conflict appeared".
+
+### Constants (`CONFLICT_LIFECYCLE`)
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `minQueryImpressions` | 50 | Noise floor before a query is tracked at all |
+| `minShare` | 0.25 | Impression share at which a page counts as a contender |
+| `resolvedOwnerShare` | 0.75 | Owner share that must be **exceeded** to resolve |
+| `impressionRetention` | 0.85 | Fraction of baseline impressions that must survive |
+| `improvingShareGain` | 0.10 | Owner share gain (points/100) counting as improvement |
+
+### Baseline
+
+Every comparison is made against the state captured at **first detection**,
+never against the previous run. Measuring run-over-run would let a slow
+multi-week decline read as a series of small improvements.
+
+### Statuses, in evaluation order
+
+| # | Status | Fires when |
+| --- | --- | --- |
+| 1 | `new` | First sighting. This run becomes the baseline. |
+| 2 | `regressed` | Was `resolved`, and ≥ 2 pages are contesting it again. |
+| 3 | `resolved` | Owner share > 75% **and** impressions ≥ 85% of baseline. |
+| 4 | `collapsed` | Owner share > 75% **but** impressions fell below 85% of baseline. |
+| 5 | `collapsed` | Contention gone **and** impressions fell below 85% of baseline. |
+| 6 | `improving` | Contention gone, demand retained, owner not yet above 75%. |
+| 7 | `improving` | Still contested, but contenders fell or owner share rose ≥ 10 points, with demand retained. |
+| 8 | `ongoing` | Anything else — still contested, no material change. |
+
+### Why `collapsed` exists
+
+Contention disappearing is **not** automatically a win. If the competing
+pages stopped showing because the query lost its demand, that is a loss
+wearing a win's clothes. Rules 4 and 5 above catch exactly that case and
+report it as `collapsed`, which is deliberately not styled as a success in
+the UI. This is the single most important distinction in the lifecycle: a
+naive "contender count dropped to 1" rule would call a traffic collapse a
+fix.
+
+### Operator state
+
+`acknowledged_at` records that a human has seen a conflict. It deliberately
+does **not** change the measured status — the engine owns status, derived
+from data alone. Acknowledging only silences the "new" highlight.
+
+Resolved conflicts move to a separate tab rather than vanishing, so a fix
+can be confirmed to hold and a regression is visible when it happens.
+Regressions sort above everything else in the open list: a fix that stopped
+holding matters more than something never looked at.
+
 ## Priority score
 
 Implemented in `packages/scoring/src/opportunity-score.ts`. Components are

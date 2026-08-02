@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { buildObservations, type QueryPageTotals } from "@entity-builder/scoring";
+import { QueryOwnerCell, type ContenderRow, type QueryOwnerRow } from "@/components/query-owner";
 import { requireUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,12 @@ interface TotalsRow {
   impressions: number;
   ctr: number;
   position: number | null;
+  // Present only on the "by query" dimension (gsc_query_owner_totals).
+  owner_page?: string | null;
+  owner_impressions?: number;
+  owner_share?: number;
+  url_count?: number;
+  contender_count?: number;
 }
 
 function fmtPct(v: number): string {
@@ -79,14 +87,41 @@ export default async function ExplorerPage({
 
   let rows: TotalsRow[] = [];
   let rpcError: string | null = null;
+  // query -> the URLs competing for it, for the expandable split.
+  const splits = new Map<string, ContenderRow[]>();
+
   if (siteId) {
+    // "By query" uses gsc_query_owner_totals (migration 0011): same
+    // aggregate columns as gsc_query_totals, plus the owning URL and the
+    // contender count so a query is never shown without its URL.
     const fn =
-      dim === "page" ? "gsc_page_totals" : dim === "date" ? "gsc_daily_totals" : "gsc_query_totals";
+      dim === "page"
+        ? "gsc_page_totals"
+        : dim === "date"
+          ? "gsc_daily_totals"
+          : "gsc_query_owner_totals";
     const args: Record<string, unknown> = { p_site_id: siteId, p_from: from, p_to: to };
     if (dim !== "date") args.p_limit = 1000;
     const { data, error } = await supabase.rpc(fn, args);
     if (error) rpcError = error.message;
     rows = (data ?? []) as TotalsRow[];
+
+    if (dim === "query" && !error) {
+      // Second pass for the per-query URL split. buildObservations is the
+      // same function the cannibalisation detector uses, so the expanded
+      // view and the opportunity feed can never disagree.
+      const pairs = await supabase.rpc("gsc_query_page_totals", {
+        p_site_id: siteId,
+        p_from: from,
+        p_to: to,
+        p_limit: 3000,
+      });
+      if (!pairs.error) {
+        for (const o of buildObservations((pairs.data ?? []) as QueryPageTotals[])) {
+          if (o.contenders.length > 1) splits.set(o.query, o.contenders);
+        }
+      }
+    }
   }
 
   const validSorts: SortKey[] = ["label", "clicks", "impressions", "ctr", "position"];
@@ -157,7 +192,7 @@ export default async function ExplorerPage({
               <tr>
                 <th>
                   <a href={sortLink("label")} style={{ color: "inherit" }}>
-                    {dim === "page" ? "Page" : dim === "date" ? "Date" : "Query"}
+                    {dim === "page" ? "Page" : dim === "date" ? "Date" : "Query / owning URL"}
                     {arrow("label")}
                   </a>
                 </th>
@@ -186,7 +221,28 @@ export default async function ExplorerPage({
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i}>
-                  <td>{r.query ?? r.page ?? r.date}</td>
+                  {dim === "query" && r.query !== undefined ? (
+                    <QueryOwnerCell
+                      row={
+                        {
+                          query: r.query,
+                          clicks: Number(r.clicks),
+                          impressions: Number(r.impressions),
+                          ctr: Number(r.ctr),
+                          position: r.position,
+                          owner_page: r.owner_page ?? null,
+                          owner_impressions: Number(r.owner_impressions ?? 0),
+                          owner_share: Number(r.owner_share ?? 0),
+                          url_count: Number(r.url_count ?? 0),
+                          contender_count: Number(r.contender_count ?? 0),
+                        } satisfies QueryOwnerRow
+                      }
+                      contenders={splits.get(r.query)}
+                      conflictHref={`/campaigns/${id}/conflicts?site=${siteId}&q=${encodeURIComponent(r.query)}`}
+                    />
+                  ) : (
+                    <td>{r.query ?? r.page ?? r.date}</td>
+                  )}
                   <td className="num">{Number(r.clicks).toLocaleString()}</td>
                   <td className="num">{Number(r.impressions).toLocaleString()}</td>
                   <td className="num">{fmtPct(Number(r.ctr))}</td>

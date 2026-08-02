@@ -1,0 +1,54 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "cost": 0.01236,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "result": [
+        {
+          "target": "keytek.co.uk",
+          "items": [
+            {
+              "se_type": "google",
+              "domain": "keytek.co.uk",
+              "avg_position": 21.08731069297843,
+              "intersections": 8716,
+              "metrics": {
+                "organic": {
+                  "etv": 115137.93329756148,
+                  "count": 8709
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "facebook.com",
+              "avg_position": 16.876694548601098,
+              "intersections": 6934,
+              "metrics": {
+                "organic": {
+                  "etv": 101251.98153984733,
+                  "count": 6934
+                }
+              }
+            },
+            {
+              "se_type": "google",
+              "domain": "youtube.com",
+              "avg_position": 22.004445303440278,
+              "intersections": 5174,
+              "metrics": {
+                "organic": {
+                  "etv": 87947.45357142575,
+                  "count": 5174
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

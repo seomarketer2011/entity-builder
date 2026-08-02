@@ -35,7 +35,7 @@ Google/GSC data lives under pauldanielstone@gmail.com).
   unowned-cluster findings).
 - **Entity graph:** locksmith-services template imported — **30 entities in
   `proposed` status, awaiting human approval** (see §7 outstanding items).
-- **Tests:** 65 passing across the packages. **Migrations:** 0001–0010, all
+- **Tests:** 197 passing across the packages. **Migrations:** 0001–0011, all
   validated on Postgres 16.
 
 Development happens on branch **`claude/entity-topical-authority-1ah7km`**.
@@ -98,7 +98,8 @@ Supabase SQL Editor and Run. Local validation harness:
 - **Cloudflare Worker secrets** on `entity-builder-web` (set via
   `npx wrangler secret put NAME`): `GOOGLE_OAUTH_CLIENT_ID`,
   `GOOGLE_OAUTH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_TOKEN`.
+  `SUPABASE_SERVICE_ROLE_KEY`, `SYNC_TOKEN`, and — for competitor entity
+  discovery — `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`.
 - **`entity-builder-cron`** worker: `SYNC_TOKEN` (must match the web
   worker's — they are rotated together).
 - **Public (browser-safe) vars** live in `apps/web/wrangler.jsonc` under
@@ -114,6 +115,12 @@ Key facts a new operator must know:
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses all row-level security. Backend only.
 - `SYNC_TOKEN` is the bearer secret protecting the internal
   `/api/internal/*` endpoints. Rotate on the web AND cron worker together.
+- `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` authenticate the DataForSEO
+  Labs API, which is **metered and prepaid** — every competitor-mining run
+  spends real balance. Discovery is opt-in per run for exactly this reason,
+  and the client enforces a per-run call budget (`SERP_LIMITS`). Without
+  these set, demand mining still works; competitor mining reports that it
+  is not configured and skips.
 - Full policy: `docs/SECURITY.md`.
 
 ---
@@ -193,10 +200,13 @@ migrations apply automatically.
   `docs/OPPORTUNITY_RULES.md` and `docs/ENTITY_SYSTEM.md`.
 - `packages/gsc` — Google OAuth, token crypto, Search Console client, sync
   planning. `packages/database` — pg helpers. `packages/entity-engine` —
-  normalisation/alias logic.
+  normalisation/alias logic **and entity discovery mining**.
+  `packages/serp` — DataForSEO Labs client (competitor domains, ranked
+  keywords) with a per-run call budget; injected fetch, tested against
+  recorded fixtures.
 - `apps/web` — Next.js dashboard + all `/api/internal/*` endpoints.
   Key routes: `app/api/google/{connect,callback,debug}`,
-  `app/api/internal/{sync,schedule-daily,analyze,import-industry,review-entity}`.
+  `app/api/internal/{sync,schedule-daily,analyze,import-industry,review-entity,discover-entities,review-candidate}`.
 - `apps/cron` — the scheduler worker.
 - `fixtures/entities/` — curated industry graph templates.
 
@@ -204,21 +214,30 @@ migrations apply automatically.
 
 ## 7. Outstanding items / things a new operator should action
 
-1. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
+1. **Apply migration 0011.** `supabase/migrations/0011_query_conflicts_and_candidates.sql`
+   adds `gsc_query_owner_totals` (query -> owning URL), the conflict
+   tracking tables, and `entity_candidates`. Until it is applied, the
+   Explorer's query view, the Conflicts page and the Discovery page all
+   show a "apply migration 0011" error and everything else keeps working.
+   Paste it into the Supabase SQL Editor and Run.
+2. **Set the DataForSEO secrets on the web worker** if competitor mining
+   is wanted in production:
+   `npx wrangler secret put DATAFORSEO_LOGIN` and `… DATAFORSEO_PASSWORD`.
+3. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
    was pasted into a chat and is still in use on the worker. Recommended:
    Supabase → Project Settings → API Keys → delete the old secret key →
    create a new one → set it as `SUPABASE_SERVICE_ROLE_KEY` on the
    `entity-builder-web` worker (`npx wrangler secret put`).
-2. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
+4. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
    the app: campaign → **Entity graph** → review and **Approve** the ones
    these businesses genuinely provide (reject the rest). Nothing downstream
    (page manifests) can proceed until this is done. Rule: humans approve;
    the system never auto-promotes (`docs/ENTITY_SYSTEM.md`).
-3. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
+5. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
    To onboard: campaign page → Add site (bare domain is fine) → filter the
    property list → Link → Queue a **Backfill**. Backfills run automatically
    thereafter; nightly analysis folds new sites in.
-4. **Connect other Google accounts** if properties live under logins other
+6. **Connect other Google accounts** if properties live under logins other
    than pauldanielstone@gmail.com (add them as OAuth test users first).
 
 ---
@@ -246,6 +265,22 @@ migrations apply automatically.
   `packages/scoring/src/detectors.ts`.
 - **`position` is a reserved word** in Postgres `RETURNS TABLE` — it's
   quoted in the `gsc_*_totals` functions (migration 0007).
+- **Conflict status is measured against first detection, never last run.**
+  Run-over-run comparison would let a slow decline read as a series of
+  small improvements. Don't "simplify" the baseline away.
+- **Contention disappearing is not automatically a win.** If the competing
+  pages stopped showing because the query lost its demand, the status is
+  `collapsed`, not `resolved`. A naive "contender count dropped to 1" rule
+  would report a traffic collapse as a fix.
+- **Float dust breaks share thresholds** — `0.7 - 0.6` is
+  `0.09999999999999998`, which silently misses a 10-point gain. Threshold
+  comparisons in `conflict-lifecycle.ts` go through an epsilon helper.
+- **DataForSEO returns HTTP 200 with an error `status_code` in the body.**
+  Checking `response.ok` alone is not enough; the client checks both the
+  envelope and the task status.
+- **`unique nulls not distinct`** (PG15+) is what makes `entity_candidates`
+  re-mining idempotent when `location_name` is NULL — a plain unique
+  constraint would let duplicates accumulate.
 
 ---
 
@@ -257,11 +292,23 @@ migrations apply automatically.
 3. **Campaign page:** add sites, connect Google, link each GSC property to
    its site, queue backfills. Sync jobs table shows import progress.
 4. **Explorer:** browse any site's queries/pages/dates; sortable columns.
-   Permanent history (survives GSC's own 16-month limit).
+   Permanent history (survives GSC's own 16-month limit). The "By query"
+   view shows the **owning URL** under each query, and badges any query
+   split across competing URLs — expand the row for the full split.
 5. **Opportunities:** priority-ranked feed with evidence + component scores.
    Accept (tracks outcome) or Dismiss. Auto-refreshes nightly.
-6. **Entity graph:** the industry ontology with per-site query-demand
+6. **Conflicts:** every query contested by two or more of your URLs,
+   tracked over successive nightly runs so you can see whether a fix you
+   applied is working. Statuses: New / Ongoing / Improving / Resolved /
+   Collapsed / Regressed. Resolved conflicts move to their own tab;
+   regressions sort to the top. Rules: `docs/OPPORTUNITY_RULES.md`.
+7. **Entity graph:** the industry ontology with per-site query-demand
    coverage; approve/reject entities here.
+8. **Discovery:** mined proposals for entities the graph is missing, laid
+   out as main entity -> locations -> services & related. Two buttons: free
+   demand mining (your own GSC data) and competitor mining (DataForSEO,
+   spends account credit). Every proposal is approve/reject/rename/re-parent
+   — nothing applies automatically. Rules: `docs/ENTITY_SYSTEM.md`.
 
 Full UI reference: `docs/UI_SPEC.md`. Deployment facts: `docs/DEPLOYMENT.md`.
 

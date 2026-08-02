@@ -21,6 +21,31 @@ insert into campaigns (id, organisation_id, name) values
   ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a0', 'Campaign A'),
   ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b0', 'Campaign B');
 
+-- One site per org, so the 0011 tenant-scoped tables have something to hang off.
+insert into sites (id, organisation_id, campaign_id, name, domain, base_url) values
+  ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a0',
+   '00000000-0000-0000-0000-0000000000a1', 'Site A', 'a.example', 'https://a.example'),
+  ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000b0',
+   '00000000-0000-0000-0000-0000000000b1', 'Site B', 'b.example', 'https://b.example');
+
+insert into query_conflicts (id, organisation_id, site_id, query) values
+  ('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a0',
+   '00000000-0000-0000-0000-0000000000a2', 'locksmith a'),
+  ('00000000-0000-0000-0000-0000000000b3', '00000000-0000-0000-0000-0000000000b0',
+   '00000000-0000-0000-0000-0000000000b2', 'locksmith b');
+
+insert into query_conflict_snapshots
+  (conflict_id, captured_on, status, contender_count, total_impressions, total_clicks) values
+  ('00000000-0000-0000-0000-0000000000a3', '2026-01-01', 'new', 2, 100, 5),
+  ('00000000-0000-0000-0000-0000000000b3', '2026-01-01', 'new', 2, 100, 5);
+
+insert into entity_candidates
+  (organisation_id, site_id, discovery_source, suggested_name, suggested_type) values
+  ('00000000-0000-0000-0000-0000000000a0', '00000000-0000-0000-0000-0000000000a2',
+   'gsc_demand', 'Candidate A', 'service'),
+  ('00000000-0000-0000-0000-0000000000b0', '00000000-0000-0000-0000-0000000000b2',
+   'gsc_demand', 'Candidate B', 'service');
+
 -- Simulate an authenticated (non-superuser, non-bypass) session as user A
 create role rls_test_user login;
 grant usage on schema public to rls_test_user;
@@ -58,6 +83,35 @@ begin
     raise exception 'RLS FAIL: user A inserted a campaign into org B';
   exception when insufficient_privilege or check_violation then
     null; -- expected: RLS blocks the write
+  end;
+
+  -- 0011 tables: conflict tracking and mined entity candidates are
+  -- tenant-scoped and must never leak across organisations.
+  select count(*) into n from query_conflicts;
+  if n <> 1 then raise exception 'RLS FAIL: user A sees % conflicts, expected 1', n; end if;
+
+  select count(*) into n from query_conflict_snapshots;
+  if n <> 1 then raise exception 'RLS FAIL: user A sees % conflict snapshots, expected 1', n; end if;
+
+  select count(*) into n from entity_candidates;
+  if n <> 1 then raise exception 'RLS FAIL: user A sees % entity candidates, expected 1', n; end if;
+
+  begin
+    insert into query_conflicts (organisation_id, site_id, query)
+    values ('00000000-0000-0000-0000-0000000000b0', '00000000-0000-0000-0000-0000000000b2', 'intruder');
+    raise exception 'RLS FAIL: user A inserted a conflict into org B';
+  exception when insufficient_privilege or check_violation then
+    null; -- expected
+  end;
+
+  begin
+    insert into entity_candidates
+      (organisation_id, site_id, discovery_source, suggested_name, suggested_type)
+    values ('00000000-0000-0000-0000-0000000000b0', '00000000-0000-0000-0000-0000000000b2',
+            'gsc_demand', 'intruder', 'service');
+    raise exception 'RLS FAIL: user A inserted a candidate into org B';
+  exception when insufficient_privilege or check_violation then
+    null; -- expected
   end;
 end $$;
 

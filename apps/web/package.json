@@ -15,8 +15,10 @@
   },
   "dependencies": {
     "@entity-builder/domain": "workspace:*",
+    "@entity-builder/entity-engine": "workspace:*",
     "@entity-builder/gsc": "workspace:*",
     "@entity-builder/scoring": "workspace:*",
+    "@entity-builder/serp": "workspace:*",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.47.0",
     "next": "^15.1.0",
