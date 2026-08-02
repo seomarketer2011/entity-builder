@@ -2,7 +2,7 @@
 
 The single source of truth for anyone (human or AI) picking this project up
 cold. If you read only one file, read this one, then follow its links.
-Last substantive update: 2026-07-12.
+Last substantive update: 2026-08-02.
 
 ---
 
@@ -22,7 +22,7 @@ Google/GSC data lives under pauldanielstone@gmail.com).
 
 ---
 
-## 2. Current status at a glance (2026-07-12)
+## 2. Current status at a glance (2026-08-02)
 
 - **Phase 0** (foundation), **Phase 1** (auth + GSC ingestion),
   **Phase 2** (opportunity detectors), **Phase 3 V1** (entity graph): all
@@ -44,9 +44,12 @@ Google/GSC data lives under pauldanielstone@gmail.com).
   is retained as an idempotent repair should those policies ever be
   recreated without it.
 
-`main` **now contains** all the entity-builder work through the entity
-graph phase (the old `claude/entity-topical-authority-1ah7km` branch was
-merged). Note that `main` also carries two unrelated side projects in
+**`main` is now the only branch, and it holds everything.** All feature
+branches have been merged and deleted. `main` is **not protected** — and on
+2026-08-02 it was deleted by accident during a branch cleanup and had to be
+restored by force-pushing from a session's local clone. That clone no longer
+exists. Protecting `main` is item 1 in §7 for this reason: there is no
+longer a second copy of this history anywhere. Note that `main` also carries two unrelated side projects in
 `dealer-dash/` and `weightloss-app/`; they share the repo but nothing else,
 and no CI job or deploy step touches them.
 
@@ -127,7 +130,10 @@ Key facts a new operator must know:
 - `SYNC_TOKEN` is the bearer secret protecting the internal
   `/api/internal/*` endpoints. Rotate on the web AND cron worker together.
 - `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` authenticate the DataForSEO
-  Labs API, which is **metered and prepaid** — every competitor-mining run
+  Labs API. Balance was **~$24.82 on 2026-08-02**; check it any time with
+  `curl -u "$DATAFORSEO_LOGIN:$DATAFORSEO_PASSWORD" https://api.dataforseo.com/v3/appendix/user_data`.
+  A competitor-mining run costs roughly a penny per domain examined. It is
+  **metered and prepaid** — every competitor-mining run
   spends real balance. Discovery is opt-in per run for exactly this reason,
   and the client enforces a per-run call budget (`SERP_LIMITS`). Without
   these set, demand mining still works; competitor mining reports that it
@@ -228,21 +234,28 @@ are pasted into the SQL Editor by hand.
 
 ## 7. Outstanding items / things a new operator should action
 
-1. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
+1. **Protect `main`.** It is the only branch and the only copy of this
+   project's history. GitHub → Settings → Branches → add a rule for `main`
+   with *Restrict deletions* on (and ideally *Require a pull request*).
+   Without it a single mis-click in the branches list destroys everything —
+   which is exactly what happened on 2026-08-02, recoverable only because a
+   session still had a local clone. Consider a periodic
+   `git clone --mirror` off-site as a second copy.
+2. **Rotate the Supabase secret key.** During setup an `sb_secret_…` key
    was pasted into a chat and is still in use on the worker. Recommended:
    Supabase → Project Settings → API Keys → delete the old secret key →
    create a new one → set it as `SUPABASE_SERVICE_ROLE_KEY` on the
    `entity-builder-web` worker (`npx wrangler secret put`).
-2. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
+3. **Approve the entity graph.** 30 locksmith entities are `proposed`. In
    the app: campaign → **Entity graph** → review and **Approve** the ones
    these businesses genuinely provide (reject the rest). Nothing downstream
    (page manifests) can proceed until this is done. Rule: humans approve;
    the system never auto-promotes (`docs/ENTITY_SYSTEM.md`).
-3. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
+4. **Link more sites.** Only 6 of ~27 discovered GSC properties are linked.
    To onboard: campaign page → Add site (bare domain is fine) → filter the
    property list → Link → Queue a **Backfill**. Backfills run automatically
    thereafter; nightly analysis folds new sites in.
-4. **Connect other Google accounts** if properties live under logins other
+5. **Connect other Google accounts** if properties live under logins other
    than pauldanielstone@gmail.com (add them as OAuth test users first).
 
 ---
@@ -298,6 +311,20 @@ are pasted into the SQL Editor by hand.
   an absent query means "outside the cap" just as often as "no
   impressions". Conflict tracking re-reads exact rows via
   `gsc_query_page_totals_for_queries`.
+- **Deleting the default branch silently reassigns it.** When `main` was
+  deleted, GitHub promoted the only surviving branch to default. Restoring
+  `main` does *not* restore the setting — it must be changed back by hand in
+  Settings → General → Default branch, or clones land on the wrong code and
+  CI's `push` trigger watches the wrong branch.
+- **The Claude session git proxy refuses branch deletions.** Both
+  `git push origin --delete` and `DELETE /git/refs/heads/...` return 403.
+  Branch deletion is a human-in-the-browser job; an agent cannot do it. It
+  *can* push a branch back, which is how `main` was recovered.
+- **To verify RLS from outside the database:** PostgREST distinguishes a
+  missing table (`404 PGRST205`) from an RLS-filtered one (`200 []`), so
+  existence can be checked with the public anon key. Policy *definitions*
+  are not visible that way — for those run, in the SQL Editor:
+  `select tablename, policyname, with_check is not null from pg_policies;`
 - **Discovery needs an explicit industry.** Entity coverage and the
   industry a candidate is approved into both depend on it, and it is never
   inferred from whatever row came back first.
@@ -314,7 +341,10 @@ are pasted into the SQL Editor by hand.
 4. **Explorer:** browse any site's queries/pages/dates; sortable columns.
    Permanent history (survives GSC's own 16-month limit). The "By query"
    view shows the **owning URL** under each query, and badges any query
-   split across competing URLs — expand the row for the full split.
+   split across competing URLs. **To see which URLs compete, click the
+   owning-URL line directly under the query** — it expands to a table of
+   every competing URL with impressions, share and position. The same cell
+   works on the campaign overview's top-queries card.
 5. **Opportunities:** priority-ranked feed with evidence + component scores.
    Accept (tracks outcome) or Dismiss. Auto-refreshes nightly.
 6. **Conflicts:** every query contested by two or more of your URLs,
